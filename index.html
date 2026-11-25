@@ -1,0 +1,2911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vidya Bharati Public School | Cloud Management, Exam & QR Marksheet Portal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRCode.js for Real Scannable QR Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Firebase SDKs (Compat v10 for zero-build single-file cloud sync) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <!-- Google Fonts: Inter & Merriweather (for Official Marksheet) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Merriweather:wght@700;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+        }
+        .font-serif-official {
+            font-family: 'Merriweather', serif;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* A4 Marksheet Styling for Screen & Print */
+        .a4-sheet {
+            width: 210mm;
+            min-height: 297mm;
+            background: white;
+            margin: 0 auto;
+            padding: 12mm;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        @media screen and (max-width: 820px) {
+            .a4-wrapper {
+                overflow-x: auto;
+                padding-bottom: 1rem;
+            }
+        }
+
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 0;
+            }
+            body * {
+                visibility: hidden;
+            }
+            #print-area, #print-area * {
+                visibility: visible;
+            }
+            #print-area {
+                position: fixed;
+                left: 0;
+                top: 0;
+                width: 210mm;
+                height: 297mm;
+                margin: 0;
+                padding: 12mm;
+                box-shadow: none !important;
+                background: white !important;
+                z-index: 99999;
+            }
+            #idcard-print-area, #idcard-print-area * {
+                visibility: visible;
+            }
+            #idcard-print-area {
+                position: fixed;
+                left: 50%;
+                top: 20mm;
+                transform: translateX(-50%);
+                box-shadow: none !important;
+                z-index: 99999;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- TOP NAVIGATION & LOGIN PORTAL BAR -->
+    <div class="bg-slate-900 text-white border-b border-slate-700 sticky top-0 z-50 no-print shadow-md">
+        <div class="max-w-7xl mx-auto px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <span id="cloud-status-badge" class="bg-amber-500 text-slate-950 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wider">Local Storage Mode</span>
+                <span id="auth-session-badge" class="text-xs text-slate-300 font-medium">Public Guest Mode</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5" id="role-switcher-buttons">
+                <button onclick="switchPortal('admission')" data-portal="admission" class="role-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200">
+                    <i class="fa-solid fa-user-plus text-emerald-400"></i> Admission Portal
+                </button>
+                <button onclick="switchPortal('idcard')" data-portal="idcard" class="role-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200">
+                    <i class="fa-solid fa-id-card text-purple-400"></i> Student ID Card
+                </button>
+                <button onclick="switchPortal('admin')" data-portal="admin" class="role-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200">
+                    <i class="fa-solid fa-shield-halved text-indigo-400"></i> Admin Login
+                </button>
+                <button onclick="switchPortal('operator')" data-portal="operator" class="role-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200">
+                    <i class="fa-solid fa-print text-sky-400"></i> Operator Login
+                </button>
+                <button onclick="switchPortal('teacher')" data-portal="teacher" class="role-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200">
+                    <i class="fa-solid fa-chalkboard-user text-amber-400"></i> Teacher Login
+                </button>
+                <button onclick="switchPortal('student')" data-portal="student" class="role-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200">
+                    <i class="fa-solid fa-graduation-cap text-rose-400"></i> Student Login
+                </button>
+                <button id="logout-btn" onclick="logoutCurrentUser()" class="hidden px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition items-center gap-1">
+                    <i class="fa-solid fa-right-from-bracket"></i> Logout
+                </button>
+                <button onclick="resetDemoData()" title="Reset Portal Data" class="ml-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCHOOL HEADER BANNER -->
+    <header class="bg-white border-b border-slate-200 no-print">
+        <div class="max-w-7xl mx-auto px-4 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-indigo-700 text-white flex items-center justify-center shadow-sm shrink-0">
+                    <i class="fa-solid fa-school text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight leading-tight">VIDYA BHARATI PUBLIC SCHOOL</h1>
+                    <p class="text-xs text-slate-500 font-medium">Affiliated to CBSE • Affiliation No. 2130984 • Cloud Management & QR Portal</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+                <div id="header-status-badges" class="flex flex-wrap items-center gap-2"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT AREA -->
+    <main id="app-container" class="flex-1 max-w-7xl w-full mx-auto px-4 py-6 no-print">
+        <!-- Dynamic View Injected Here -->
+    </main>
+
+    <!-- A4 MARKSHEET PRINT & PREVIEW MODAL -->
+    <div id="marksheet-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex-col">
+        <div class="bg-slate-900 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 no-print">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-file-pdf text-rose-400 text-lg"></i>
+                <span class="font-bold text-sm sm:text-base">Official A4 Marksheet & QR Verification</span>
+                <span class="hidden md:inline-block text-xs bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full">Paper Size: A4 (210mm × 297mm)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="btn-simulate-qr" onclick="" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 shadow transition">
+                    <i class="fa-solid fa-qrcode"></i> Simulate QR Scan (Verify)
+                </button>
+                <button onclick="window.print()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow transition">
+                    <i class="fa-solid fa-print"></i> Print / Save A4 PDF
+                </button>
+                <button onclick="closeMarksheetModal()" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs sm:text-sm font-semibold transition">
+                    <i class="fa-solid fa-xmark"></i> Close
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 sm:p-8 a4-wrapper">
+            <div id="print-area" class="a4-sheet border-2 border-slate-800 text-slate-900">
+                <!-- A4 Marksheet Content Injected Here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- PUBLIC QR RESULT & ID VERIFICATION MODAL -->
+    <div id="verify-modal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[60] hidden items-center justify-center p-4 overflow-y-auto no-print">
+        <div class="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 my-auto">
+            <div class="bg-emerald-700 text-white px-5 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
+                        <i class="fa-solid fa-circle-check text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base leading-tight">Official Digital Verification</h3>
+                        <p class="text-[11px] text-emerald-100">Vidya Bharati Public School • Cloud Ledger</p>
+                    </div>
+                </div>
+                <button onclick="closeVerifyModal()" class="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div id="verify-modal-body" class="p-5">
+                <!-- Verification details injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- STUDENT IDENTITY CARD PRINT & QR MODAL -->
+    <div id="idcard-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex-col">
+        <div class="bg-slate-900 text-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 no-print">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-id-card text-purple-400 text-lg"></i>
+                <span class="font-bold text-sm sm:text-base">Official Student Identity Card (QR Verified)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="btn-simulate-id-qr" onclick="" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 shadow transition">
+                    <i class="fa-solid fa-qrcode"></i> Simulate ID QR Scan
+                </button>
+                <button onclick="window.print()" class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow transition">
+                    <i class="fa-solid fa-print"></i> Print / Save ID Card
+                </button>
+                <button onclick="closeIdCardModal()" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs sm:text-sm font-semibold transition">
+                    <i class="fa-solid fa-xmark"></i> Close
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-6 flex items-center justify-center">
+            <div id="idcard-print-area" class="bg-white rounded-2xl shadow-2xl border-2 border-slate-800 overflow-hidden w-[340px] text-slate-900">
+                <!-- ID Card Content Injected Here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- CONFIRMATION MODAL -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[70] hidden items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200">
+            <h3 id="confirm-title" class="text-lg font-bold text-slate-900 mb-2">Confirm Action</h3>
+            <p id="confirm-message" class="text-sm text-slate-600 mb-5">Are you sure?</p>
+            <div class="flex justify-end gap-2.5">
+                <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold">Cancel</button>
+                <button id="confirm-yes-btn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 no-print">
+        <p>Vidya Bharati Public School Management & QR Verification System • Zero-Cost Cloud Hosting (Firebase / GitHub Pages)</p>
+    </footer>
+
+    <script>
+        // =========================================================================
+        // 1. CLOUD DATABASE CONFIGURATION (PASTE YOUR FIREBASE KEYS HERE)
+        // =========================================================================
+         const firebaseConfig = {
+            apiKey: "AIzaSyCm-vfaSlLOdMN3-RAlY51NVMNsxpJ3YRk",
+            authDomain: "school-cloud-portal.firebaseapp.com",
+            projectId: "school-cloud-portal",
+            storageBucket: "school-cloud-portal.firebasestorage.app",
+            messagingSenderId: "784294397359",
+            appId: "1:784294397359:web:8f83e15f55022dc8e35b5a"
+        };
+
+        // =========================================================================
+        // 2. STATE MANAGEMENT & REAL-TIME CLOUD SYNC (FIREBASE FIRESTORE + FALLBACK)
+        // =========================================================================
+        const STORAGE_KEY = 'vbps_school_portal_v4';
+        let firestoreDb = null;
+        let cloudSyncEnabled = false;
+        let isApplyingRemoteSnapshot = false;
+
+        const DEFAULT_AVATAR_BOY = "https://placehold.co/150x180/e2e8f0/1e293b?text=Student+Photo";
+        const DEFAULT_AVATAR_GIRL = "https://placehold.co/150x180/fce7f3/831843?text=Student+Photo";
+
+        const ALL_CLASSES = ['PG', 'LKG', 'UKG', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9'];
+        const DEFAULT_SUBJECTS = ['English', 'Hindi', 'Mathematics', 'Science', 'Social Science', 'Computer'];
+        const EXAM_TERMS = [
+            { key: 'quarterly', label: 'Quarterly Exam (100)', short: 'Quarterly' },
+            { key: 'halfYearly', label: 'Half-Yearly Exam (100)', short: 'Half-Yearly' },
+            { key: 'yearly', label: 'Yearly Exam (100)', short: 'Yearly' }
+        ];
+
+        const initialData = {
+            subjects: [...DEFAULT_SUBJECTS],
+            settings: {
+                admissionOpen: true,
+                operatorCanApprove: true,
+                teachersCanEditMarks: true,
+                onlineExamAllowed: false,
+                activeExamTerm: 'Annual Examination 2025-26',
+                adminPassword: 'admin123',
+                operatorPassword: 'op123'
+            },
+            teachers: [
+                {
+                    id: 'TCH-01',
+                    name: 'Mr. Rajesh Sharma',
+                    qualification: 'M.Sc. Mathematics, B.Ed.',
+                    mobile: '9876501101',
+                    password: 'teach123',
+                    assignments: [
+                        { className: 'Class 8', subject: 'Mathematics' },
+                        { className: 'Class 8', subject: 'Science' },
+                        { className: 'Class 9', subject: 'Mathematics' }
+                    ]
+                },
+                {
+                    id: 'TCH-02',
+                    name: 'Mrs. Priya Verma',
+                    qualification: 'M.A. English & Hindi, B.Ed.',
+                    mobile: '9876501102',
+                    password: 'teach123',
+                    assignments: [
+                        { className: 'Class 8', subject: 'English' },
+                        { className: 'Class 8', subject: 'Hindi' },
+                        { className: 'Class 8', subject: 'Social Science' }
+                    ]
+                },
+                {
+                    id: 'TCH-03',
+                    name: 'Mr. Amitabh Gupta',
+                    qualification: 'MCA, B.Ed.',
+                    mobile: '9876501103',
+                    password: 'teach123',
+                    assignments: [
+                        { className: 'Class 8', subject: 'Computer' }
+                    ]
+                }
+            ],
+            admissions: [
+                {
+                    appId: 'APP-2025-101',
+                    name: 'Kavya Singh',
+                    fatherName: 'Manoj Singh',
+                    motherName: 'Rekha Singh',
+                    dob: '2013-08-14',
+                    gender: 'Female',
+                    className: 'Class 8',
+                    mobile: '9811223344',
+                    aadhaar: '4512-8890-1122',
+                    address: 'Sector 14, Gomti Nagar, Lucknow',
+                    photo: DEFAULT_AVATAR_GIRL,
+                    status: 'pending',
+                    appliedDate: '2025-05-10'
+                },
+                {
+                    appId: 'APP-2025-102',
+                    name: 'Rohan Yadav',
+                    fatherName: 'Suresh Yadav',
+                    motherName: 'Sunita Yadav',
+                    dob: '2014-02-22',
+                    gender: 'Male',
+                    className: 'Class 7',
+                    mobile: '9822334455',
+                    aadhaar: '',
+                    address: 'Alambagh, Lucknow',
+                    photo: DEFAULT_AVATAR_BOY,
+                    status: 'pending',
+                    appliedDate: '2025-05-11'
+                }
+            ],
+            students: [
+                {
+                    id: 'STU-1001',
+                    regNo: 'VBPS-2025-001',
+                    rollNo: '801',
+                    name: 'Aarav Sharma',
+                    fatherName: 'Vikram Sharma',
+                    motherName: 'Neha Sharma',
+                    dob: '2012-05-18',
+                    gender: 'Male',
+                    className: 'Class 8',
+                    mobile: '9876543210',
+                    aadhaar: '7845-2319-6041',
+                    address: 'Indira Nagar, Lucknow',
+                    photo: DEFAULT_AVATAR_BOY,
+                    offlineMarks: {
+                        'English': 88,
+                        'Hindi': 90,
+                        'Mathematics': 93,
+                        'Science': 89,
+                        'Social Science': 84,
+                        'Computer': 95
+                    },
+                    termPapers: {
+                        'English': { quarterly: { viva: 9, test: 17, theory: 58 }, halfYearly: { viva: 9, test: 18, theory: 60 }, yearly: { viva: 9, test: 18, theory: 61 } },
+                        'Hindi': { quarterly: { viva: 9, test: 18, theory: 59 }, halfYearly: { viva: 9, test: 18, theory: 61 }, yearly: { viva: 10, test: 18, theory: 62 } },
+                        'Mathematics': { quarterly: { viva: 9, test: 18, theory: 61 }, halfYearly: { viva: 10, test: 19, theory: 63 }, yearly: { viva: 10, test: 19, theory: 64 } },
+                        'Science': { quarterly: { viva: 8, test: 17, theory: 58 }, halfYearly: { viva: 9, test: 18, theory: 60 }, yearly: { viva: 9, test: 18, theory: 62 } },
+                        'Social Science': { quarterly: { viva: 8, test: 16, theory: 55 }, halfYearly: { viva: 8, test: 17, theory: 57 }, yearly: { viva: 9, test: 17, theory: 58 } },
+                        'Computer': { quarterly: { viva: 10, test: 19, theory: 63 }, halfYearly: { viva: 10, test: 19, theory: 64 }, yearly: { viva: 10, test: 20, theory: 65 } }
+                    },
+                    onlineMarks: {
+                        'Mathematics': 18,
+                        'Science': 17
+                    }
+                },
+                {
+                    id: 'STU-1002',
+                    regNo: 'VBPS-2025-002',
+                    rollNo: '802',
+                    name: 'Ananya Verma',
+                    fatherName: 'Deepak Verma',
+                    motherName: 'Pooja Verma',
+                    dob: '2012-11-04',
+                    gender: 'Female',
+                    className: 'Class 8',
+                    mobile: '9876543211',
+                    aadhaar: '',
+                    address: 'Mahanagar, Lucknow',
+                    photo: DEFAULT_AVATAR_GIRL,
+                    offlineMarks: {
+                        'English': 92,
+                        'Hindi': 90,
+                        'Mathematics': 89,
+                        'Science': 91,
+                        'Social Science': 87,
+                        'Computer': 96
+                    },
+                    termPapers: {
+                        'English': { quarterly: { viva: 9, test: 18, theory: 61 }, halfYearly: { viva: 10, test: 18, theory: 62 }, yearly: { viva: 10, test: 19, theory: 63 } },
+                        'Hindi': { quarterly: { viva: 9, test: 18, theory: 60 }, halfYearly: { viva: 9, test: 18, theory: 61 }, yearly: { viva: 9, test: 19, theory: 62 } },
+                        'Mathematics': { quarterly: { viva: 9, test: 17, theory: 59 }, halfYearly: { viva: 9, test: 18, theory: 60 }, yearly: { viva: 9, test: 18, theory: 62 } },
+                        'Science': { quarterly: { viva: 9, test: 18, theory: 60 }, halfYearly: { viva: 9, test: 18, theory: 62 }, yearly: { viva: 10, test: 18, theory: 63 } },
+                        'Social Science': { quarterly: { viva: 8, test: 17, theory: 58 }, halfYearly: { viva: 9, test: 17, theory: 59 }, yearly: { viva: 9, test: 18, theory: 60 } },
+                        'Computer': { quarterly: { viva: 10, test: 19, theory: 65 }, halfYearly: { viva: 10, test: 19, theory: 66 }, yearly: { viva: 10, test: 20, theory: 66 } }
+                    },
+                    onlineMarks: {
+                        'Mathematics': 19
+                    }
+                },
+                {
+                    id: 'STU-1003',
+                    regNo: 'VBPS-2025-003',
+                    rollNo: '901',
+                    name: 'Vivaan Patel',
+                    fatherName: 'Ramesh Patel',
+                    motherName: 'Geeta Patel',
+                    dob: '2011-09-29',
+                    gender: 'Male',
+                    className: 'Class 9',
+                    mobile: '9876543212',
+                    aadhaar: '3310-9912-4401',
+                    address: 'Vikas Nagar, Lucknow',
+                    photo: DEFAULT_AVATAR_BOY,
+                    offlineMarks: {
+                        'English': 79,
+                        'Hindi': 81,
+                        'Mathematics': 85,
+                        'Science': 78,
+                        'Social Science': 76,
+                        'Computer': 87
+                    },
+                    termPapers: {
+                        'English': { quarterly: { viva: 8, test: 15, theory: 52 }, halfYearly: { viva: 8, test: 16, theory: 53 }, yearly: { viva: 8, test: 16, theory: 55 } },
+                        'Hindi': { quarterly: { viva: 8, test: 16, theory: 53 }, halfYearly: { viva: 8, test: 16, theory: 55 }, yearly: { viva: 9, test: 16, theory: 56 } },
+                        'Mathematics': { quarterly: { viva: 8, test: 17, theory: 56 }, halfYearly: { viva: 9, test: 17, theory: 57 }, yearly: { viva: 9, test: 18, theory: 58 } },
+                        'Science': { quarterly: { viva: 7, test: 15, theory: 51 }, halfYearly: { viva: 8, test: 15, theory: 53 }, yearly: { viva: 8, test: 16, theory: 54 } },
+                        'Social Science': { quarterly: { viva: 7, test: 15, theory: 50 }, halfYearly: { viva: 8, test: 15, theory: 51 }, yearly: { viva: 8, test: 15, theory: 53 } },
+                        'Computer': { quarterly: { viva: 9, test: 17, theory: 58 }, halfYearly: { viva: 9, test: 17, theory: 59 }, yearly: { viva: 9, test: 18, theory: 60 } }
+                    },
+                    onlineMarks: {}
+                }
+            ],
+            onlineExams: [
+                {
+                    id: 'EXM-101',
+                    title: 'Class 8 Mathematics Online Assessment (20 Marks)',
+                    className: 'Class 8',
+                    subject: 'Mathematics',
+                    durationMinutes: 5,
+                    totalMarks: 20,
+                    active: true,
+                    questions: [
+                        { q: 'What is the value of (3x + 5) when x = 4?', options: ['12', '17', '19', '23'], answer: 1 },
+                        { q: 'What is the sum of interior angles of a quadrilateral?', options: ['180°', '270°', '360°', '540°'], answer: 2 },
+                        { q: 'Find the cube root of 512.', options: ['6', '7', '8', '9'], answer: 2 },
+                        { q: 'If a shirt costs ₹500 and is sold at a 10% discount, what is the selling price?', options: ['₹400', '₹450', '₹490', '₹550'], answer: 1 }
+                    ]
+                },
+                {
+                    id: 'EXM-102',
+                    title: 'Class 8 General Science Online Quiz (20 Marks)',
+                    className: 'Class 8',
+                    subject: 'Science',
+                    durationMinutes: 5,
+                    totalMarks: 20,
+                    active: true,
+                    questions: [
+                        { q: 'Which organelle is known as the powerhouse of the cell?', options: ['Nucleus', 'Ribosome', 'Mitochondria', 'Chloroplast'], answer: 2 },
+                        { q: 'What is the SI unit of Force?', options: ['Pascal', 'Joule', 'Newton', 'Watt'], answer: 2 },
+                        { q: 'Which gas is released during photosynthesis?', options: ['Carbon Dioxide', 'Oxygen', 'Nitrogen', 'Hydrogen'], answer: 1 },
+                        { q: 'Sound cannot travel through which of the following?', options: ['Water', 'Steel', 'Air', 'Vacuum'], answer: 3 }
+                    ]
+                }
+            ]
+        };
+
+        let db = loadState();
+        let currentPortal = 'admission';
+        let authSession = {
+            admin: false,
+            operator: false,
+            teacherId: null,
+            studentId: null
+        };
+        let adminTab = 'controls';
+        let operatorTab = 'admissions';
+        let selectedTeacherId = db.teachers[0]?.id || 'TCH-01';
+        let selectedTeacherClassSub = null;
+        let selectedTeacherTerm = 'yearly';
+        let selectedStudentId = db.students[0]?.id || 'STU-1001';
+        let studentTab = 'result';
+        let activeExamSession = null;
+
+        function normalizeDbSchema(parsed) {
+            if (!Array.isArray(parsed.subjects) || parsed.subjects.length === 0) parsed.subjects = [...DEFAULT_SUBJECTS];
+            if (!parsed.settings) parsed.settings = JSON.parse(JSON.stringify(initialData.settings));
+            if (!parsed.settings.adminPassword) parsed.settings.adminPassword = 'admin123';
+            if (!parsed.settings.operatorPassword) parsed.settings.operatorPassword = 'op123';
+            if (parsed.settings.onlineExamAllowed === undefined) parsed.settings.onlineExamAllowed = false;
+            if (!Array.isArray(parsed.teachers)) parsed.teachers = [];
+            if (!Array.isArray(parsed.admissions)) parsed.admissions = [];
+            if (!Array.isArray(parsed.students)) parsed.students = [];
+            if (!Array.isArray(parsed.onlineExams)) parsed.onlineExams = [];
+            parsed.teachers.forEach(t => { if (!t.password) t.password = 'teach123'; });
+            parsed.students.forEach(s => { if (!s.termPapers) s.termPapers = {}; });
+            return parsed;
+        }
+
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) return normalizeDbSchema(JSON.parse(raw));
+            } catch (e) {
+                console.error('Error loading local state:', e);
+            }
+            return JSON.parse(JSON.stringify(initialData));
+        }
+
+        function updateCloudBadgeUI() {
+            const badge = document.getElementById('cloud-status-badge');
+            if (!badge) return;
+            if (cloudSyncEnabled) {
+                badge.className = 'bg-emerald-500 text-slate-950 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wider';
+                badge.innerHTML = '<i class="fa-solid fa-cloud mr-1"></i>Cloud Synced (Firebase)';
+            } else {
+                badge.className = 'bg-amber-500 text-slate-950 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wider';
+                badge.innerHTML = '<i class="fa-solid fa-hard-drive mr-1"></i>Local Storage Mode';
+            }
+        }
+
+        function initCloudDatabase() {
+            if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId && typeof firebase !== 'undefined') {
+                try {
+                    if (!firebase.apps.length) {
+                        firebase.initializeApp(FIREBASE_CONFIG);
+                    }
+                    firestoreDb = firebase.firestore();
+                    cloudSyncEnabled = true;
+                    updateCloudBadgeUI();
+
+                    const docRef = firestoreDb.collection('school_portal').doc('main_state');
+                    docRef.onSnapshot((snapshot) => {
+                        if (snapshot.exists) {
+                            isApplyingRemoteSnapshot = true;
+                            db = normalizeDbSchema(snapshot.data());
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+                            if (!activeExamSession) {
+                                renderCurrentPortal();
+                            }
+                            isApplyingRemoteSnapshot = false;
+                        } else {
+                            docRef.set(JSON.parse(JSON.stringify(db)));
+                        }
+                    }, (err) => {
+                        console.error('Firestore listener error:', err);
+                        showToast('Cloud sync warning: check Firestore security rules.', 'warning');
+                    });
+                } catch (err) {
+                    console.error('Firebase init failed:', err);
+                }
+            }
+            updateCloudBadgeUI();
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+            } catch (e) {
+                showToast('Local cache full. Relying on cloud storage.', 'warning');
+            }
+            if (cloudSyncEnabled && firestoreDb && !isApplyingRemoteSnapshot) {
+                firestoreDb.collection('school_portal').doc('main_state')
+                    .set(JSON.parse(JSON.stringify(db)))
+                    .catch(err => console.error('Cloud save failed:', err));
+            }
+            updateHeaderStatusBadges();
+        }
+
+        function resetDemoData() {
+            openConfirmModal(
+                'Reset Portal Data?',
+                'This will restore all sample students, admissions, teachers, and marks back to default.',
+                () => {
+                    localStorage.removeItem(STORAGE_KEY);
+                    db = JSON.parse(JSON.stringify(initialData));
+                    authSession = { admin: false, operator: false, teacherId: null, studentId: null };
+                    saveState();
+                    renderCurrentPortal();
+                    showToast('Portal data reset successfully!', 'success');
+                }
+            );
+        }
+
+        // =========================================================================
+        // 3. UI UTILITIES (TOASTS, MODALS, IMAGE COMPRESSION)
+        // =========================================================================
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const colors = {
+                success: 'bg-emerald-600 text-white',
+                error: 'bg-rose-600 text-white',
+                warning: 'bg-amber-500 text-slate-950',
+                info: 'bg-slate-800 text-white'
+            };
+            const icons = {
+                success: 'fa-circle-check',
+                error: 'fa-circle-exclamation',
+                warning: 'fa-triangle-exclamation',
+                info: 'fa-circle-info'
+            };
+            const toast = document.createElement('div');
+            toast.className = `${colors[type] || colors.info} px-4 py-3 rounded-xl shadow-lg text-xs sm:text-sm font-semibold flex items-center gap-2.5 transition-all duration-300 pointer-events-auto`;
+            toast.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        }
+
+        let confirmCallback = null;
+        function openConfirmModal(title, message, onConfirm) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-message').textContent = message;
+            confirmCallback = onConfirm;
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            confirmCallback = null;
+        }
+        document.getElementById('confirm-yes-btn').addEventListener('click', () => {
+            if (confirmCallback) confirmCallback();
+            closeConfirmModal();
+        });
+
+        function compressImageToDataURL(file, maxWidth = 180, maxHeight = 220) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        if (width > height) {
+                            if (width > maxWidth) {
+                                height = Math.round((height *= maxWidth / width));
+                                width = maxWidth;
+                            }
+                        } else {
+                            if (height > maxHeight) {
+                                width = Math.round((width *= maxHeight / height));
+                                height = maxHeight;
+                            }
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.72));
+                    };
+                    img.onerror = reject;
+                    img.src = event.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // =========================================================================
+        // 4. PORTAL NAVIGATION & AUTHENTICATION GATEWAY
+        // =========================================================================
+        function switchPortal(portalName) {
+            if (activeExamSession && activeExamSession.timerInterval) {
+                clearInterval(activeExamSession.timerInterval);
+                activeExamSession = null;
+            }
+            currentPortal = portalName;
+            updateAuthUI();
+            renderCurrentPortal();
+        }
+
+        function updateAuthUI() {
+            document.querySelectorAll('.role-btn').forEach(btn => {
+                if (btn.dataset.portal === currentPortal) {
+                    btn.classList.remove('bg-slate-800', 'text-slate-200');
+                    btn.classList.add('bg-indigo-600', 'text-white', 'ring-2', 'ring-indigo-400');
+                } else {
+                    btn.classList.add('bg-slate-800', 'text-slate-200');
+                    btn.classList.remove('bg-indigo-600', 'text-white', 'ring-2', 'ring-indigo-400');
+                }
+            });
+
+            const badge = document.getElementById('auth-session-badge');
+            const logoutBtn = document.getElementById('logout-btn');
+            const isLoggedIn = authSession.admin || authSession.operator || authSession.teacherId || authSession.studentId;
+
+            if (isLoggedIn) {
+                logoutBtn.classList.remove('hidden');
+                logoutBtn.classList.add('inline-flex');
+                if (authSession.admin) badge.innerHTML = `<span class="text-indigo-300 font-bold"><i class="fa-solid fa-lock-open mr-1"></i>Logged in: Admin</span>`;
+                else if (authSession.operator) badge.innerHTML = `<span class="text-sky-300 font-bold"><i class="fa-solid fa-lock-open mr-1"></i>Logged in: Operator</span>`;
+                else if (authSession.teacherId) {
+                    const t = db.teachers.find(x => x.id === authSession.teacherId);
+                    badge.innerHTML = `<span class="text-amber-300 font-bold"><i class="fa-solid fa-lock-open mr-1"></i>Faculty: ${t ? t.name : authSession.teacherId}</span>`;
+                } else if (authSession.studentId) {
+                    const s = db.students.find(x => x.id === authSession.studentId);
+                    badge.innerHTML = `<span class="text-rose-300 font-bold"><i class="fa-solid fa-lock-open mr-1"></i>Student: ${s ? s.name : authSession.studentId}</span>`;
+                }
+            } else {
+                logoutBtn.classList.add('hidden');
+                logoutBtn.classList.remove('inline-flex');
+                badge.textContent = 'Public Guest Mode';
+            }
+        }
+
+        function logoutCurrentUser() {
+            authSession = { admin: false, operator: false, teacherId: null, studentId: null };
+            updateAuthUI();
+            renderCurrentPortal();
+            showToast('Logged out successfully.', 'info');
+        }
+
+        function updateHeaderStatusBadges() {
+            const el = document.getElementById('header-status-badges');
+            if (!el) return;
+            const pendingCount = db.admissions.filter(a => a.status === 'pending').length;
+            el.innerHTML = `
+                <span class="px-2.5 py-1 rounded-full font-semibold ${db.settings.admissionOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                    <i class="fa-solid fa-circle text-[8px] mr-1"></i>Admission: ${db.settings.admissionOpen ? 'OPEN' : 'CLOSED'}
+                </span>
+                <span class="px-2.5 py-1 rounded-full font-semibold ${db.settings.onlineExamAllowed ? 'bg-indigo-100 text-indigo-800' : 'bg-purple-100 text-purple-800'}">
+                    <i class="fa-solid fa-file-lines mr-1"></i>Mode: ${db.settings.onlineExamAllowed ? 'Online + Offline' : '100M (10V+20T+70Th)'}
+                </span>
+                <span class="px-2.5 py-1 rounded-full font-semibold bg-amber-100 text-amber-800">
+                    Pending Apps: ${pendingCount}
+                </span>
+            `;
+        }
+
+        function renderCurrentPortal() {
+            updateHeaderStatusBadges();
+            updateAuthUI();
+            const container = document.getElementById('app-container');
+            if (currentPortal === 'admission') {
+                renderAdmissionPortal(container);
+            } else if (currentPortal === 'idcard') {
+                renderIdCardPortal(container);
+            } else if (currentPortal === 'admin') {
+                if (!authSession.admin) renderLoginScreen(container, 'admin');
+                else renderAdminPortal(container);
+            } else if (currentPortal === 'operator') {
+                if (!authSession.operator) renderLoginScreen(container, 'operator');
+                else renderOperatorPortal(container);
+            } else if (currentPortal === 'teacher') {
+                if (!authSession.teacherId) renderLoginScreen(container, 'teacher');
+                else renderTeacherPortal(container);
+            } else if (currentPortal === 'student') {
+                if (!authSession.studentId) renderLoginScreen(container, 'student');
+                else renderStudentPortal(container);
+            }
+        }
+
+        function renderLoginScreen(container, role) {
+            const configs = {
+                admin: {
+                    title: 'Administrator Login',
+                    subtitle: 'Restricted access for School Principal / Super Admin only.',
+                    icon: 'fa-shield-halved',
+                    btnColor: 'bg-indigo-600 hover:bg-indigo-700',
+                    idLabel: 'Admin Username',
+                    idPlaceholder: 'Enter Admin Username',
+                    passLabel: 'Admin Password'
+                },
+                operator: {
+                    title: 'Office Operator Login',
+                    subtitle: 'Authorized staff access for admission verification & A4 marksheet printing.',
+                    icon: 'fa-print',
+                    btnColor: 'bg-sky-600 hover:bg-sky-700',
+                    idLabel: 'Operator Username',
+                    idPlaceholder: 'Enter Operator Username',
+                    passLabel: 'Operator Password'
+                },
+                teacher: {
+                    title: 'Faculty / Teacher Login',
+                    subtitle: 'Enter your Teacher ID (or Mobile) and Password to enter marks for your assigned subjects.',
+                    icon: 'fa-chalkboard-user',
+                    btnColor: 'bg-amber-600 hover:bg-amber-700',
+                    idLabel: 'Teacher ID or Mobile Number',
+                    idPlaceholder: 'Enter Teacher ID or Mobile',
+                    passLabel: 'Faculty Password'
+                },
+                student: {
+                    title: 'Student Result & Exam Login',
+                    subtitle: 'Login with your approved Registration Number (or Mobile) and Date of Birth.',
+                    icon: 'fa-graduation-cap',
+                    btnColor: 'bg-rose-600 hover:bg-rose-700',
+                    idLabel: 'Registration Number or Mobile',
+                    idPlaceholder: 'Enter Registration No. or Mobile',
+                    passLabel: 'Date of Birth (YYYY-MM-DD)'
+                }
+            };
+
+            const cfg = configs[role];
+
+            container.innerHTML = `
+                <div class="max-w-md mx-auto mt-4">
+                    <div class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
+                        <div class="p-6 bg-slate-900 text-white text-center">
+                            <div class="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center mx-auto mb-3">
+                                <i class="fa-solid ${cfg.icon} text-2xl text-white"></i>
+                            </div>
+                            <h2 class="text-xl font-extrabold">${cfg.title}</h2>
+                            <p class="text-xs text-slate-300 mt-1">${cfg.subtitle}</p>
+                        </div>
+
+                        <form onsubmit="handleRoleLogin(event, '${role}')" class="p-6 space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 mb-1.5">${cfg.idLabel}</label>
+                                <input type="text" id="login-identifier" required placeholder="${cfg.idPlaceholder}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500">
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 mb-1.5">${cfg.passLabel}</label>
+                                <input type="password" id="login-secret" required placeholder="••••••••" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500">
+                            </div>
+
+                            <button type="submit" class="w-full py-3 rounded-xl ${cfg.btnColor} text-white font-bold text-sm shadow transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-right-to-bracket"></i> Verify & Open Dashboard
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleRoleLogin(e, role) {
+            e.preventDefault();
+            const identifier = document.getElementById('login-identifier').value.trim();
+            const secret = document.getElementById('login-secret').value.trim();
+
+            if (role === 'admin') {
+                if (identifier.toLowerCase() === 'admin' && secret === db.settings.adminPassword) {
+                    authSession.admin = true;
+                    showToast('Admin authenticated successfully!', 'success');
+                    renderCurrentPortal();
+                } else {
+                    showToast('Invalid Admin username or password.', 'error');
+                }
+            } else if (role === 'operator') {
+                if (identifier.toLowerCase() === 'operator' && secret === db.settings.operatorPassword) {
+                    authSession.operator = true;
+                    showToast('Operator authenticated successfully!', 'success');
+                    renderCurrentPortal();
+                } else {
+                    showToast('Invalid Operator username or password.', 'error');
+                }
+            } else if (role === 'teacher') {
+                const teacher = db.teachers.find(t =>
+                    (t.id.toLowerCase() === identifier.toLowerCase() || t.mobile === identifier) &&
+                    t.password === secret
+                );
+                if (teacher) {
+                    authSession.teacherId = teacher.id;
+                    showToast(`Welcome, ${teacher.name}!`, 'success');
+                    renderCurrentPortal();
+                } else {
+                    showToast('Invalid Teacher ID/Mobile or Password.', 'error');
+                }
+            } else if (role === 'student') {
+                const student = db.students.find(s =>
+                    (s.regNo.toLowerCase() === identifier.toLowerCase() || s.mobile === identifier) &&
+                    s.dob === secret
+                );
+                if (student) {
+                    authSession.studentId = student.id;
+                    showToast(`Welcome, ${student.name}!`, 'success');
+                    renderCurrentPortal();
+                } else {
+                    showToast('Invalid Registration No./Mobile or Date of Birth.', 'error');
+                }
+            }
+        }
+
+        // =========================================================================
+        // 5. PUBLIC STUDENT ADMISSION PORTAL
+        // =========================================================================
+        let uploadedAdmissionPhotoDataUrl = '';
+
+        function renderAdmissionPortal(container) {
+            if (!db.settings.admissionOpen) {
+                container.innerHTML = `
+                    <div class="max-w-xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
+                        <div class="w-16 h-16 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-lock text-2xl"></i>
+                        </div>
+                        <h2 class="text-2xl font-extrabold text-slate-900 mb-2">Online Admission Portal is Currently Closed</h2>
+                        <p class="text-sm text-slate-600 mb-6">The school administration has temporarily closed new student admission submissions. Please check back later or contact the school office.</p>
+                        <button onclick="switchPortal('admin')" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">
+                            Open Admin Login to Enable Portal
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="bg-gradient-to-r from-emerald-700 to-teal-700 px-6 py-5 text-white">
+                            <span class="inline-block bg-white/20 text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full mb-1">Session 2025-26 Open</span>
+                            <h2 class="text-xl sm:text-2xl font-extrabold">Online Student Admission Form</h2>
+                            <p class="text-xs sm:text-sm text-emerald-100 mt-0.5">Fill in accurate student details, upload passport photo, mobile number, and optional Aadhaar number.</p>
+                        </div>
+
+                        <form id="admission-form" onsubmit="handleAdmissionSubmit(event)" class="p-6 space-y-5">
+                            <div class="flex flex-col sm:flex-row items-center gap-4 p-4 rounded-xl bg-slate-50 border border-dashed border-slate-300">
+                                <img id="adm-photo-preview" src="${DEFAULT_AVATAR_BOY}" alt="Student Preview" class="w-24 h-28 object-cover rounded-xl border-2 border-white shadow bg-slate-200 shrink-0">
+                                <div class="flex-1 text-center sm:text-left">
+                                    <label class="block text-sm font-bold text-slate-800 mb-1">Student Passport Photo <span class="text-rose-600">*</span></label>
+                                    <p class="text-xs text-slate-500 mb-2.5">Upload JPG/PNG photo. Auto-compressed in your browser for fast zero-cost cloud storage.</p>
+                                    <input type="file" id="adm-photo-input" accept="image/*" onchange="handleAdmissionPhotoChange(event)" class="block w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Student Full Name <span class="text-rose-600">*</span></label>
+                                    <input type="text" id="adm-name" required placeholder="e.g. Aarav Kumar" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Applying For Class <span class="text-rose-600">*</span></label>
+                                    <select id="adm-class" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-emerald-500">
+                                        ${ALL_CLASSES.map(c => `<option value="${c}" ${c === 'Class 8' ? 'selected' : ''}>${c}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Father's Name <span class="text-rose-600">*</span></label>
+                                    <input type="text" id="adm-father" required placeholder="e.g. Rajesh Kumar" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Mother's Name <span class="text-rose-600">*</span></label>
+                                    <input type="text" id="adm-mother" required placeholder="e.g. Sunita Devi" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Date of Birth <span class="text-rose-600">*</span></label>
+                                    <input type="date" id="adm-dob" required value="2012-06-15" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Gender <span class="text-rose-600">*</span></label>
+                                    <select id="adm-gender" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white focus:ring-2 focus:ring-emerald-500">
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Mobile Number <span class="text-rose-600">*</span></label>
+                                    <input type="tel" id="adm-mobile" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit mobile number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Aadhaar Number <span class="text-slate-400 font-normal">(Optional)</span></label>
+                                    <input type="text" id="adm-aadhaar" maxlength="14" placeholder="XXXX-XXXX-XXXX (Optional)" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 mb-1">Residential Address <span class="text-rose-600">*</span></label>
+                                <textarea id="adm-address" rows="2" required placeholder="House No., Village/Colony, District, Pin Code" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500"></textarea>
+                            </div>
+
+                            <button type="submit" class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-paper-plane"></i> Submit Admission Application
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                            <h3 class="font-bold text-slate-900 text-base mb-1 flex items-center gap-2">
+                                <i class="fa-solid fa-magnifying-glass text-indigo-600"></i> Track Admission Status
+                            </h3>
+                            <p class="text-xs text-slate-500 mb-3">Enter your Mobile Number or Application ID to check approval status.</p>
+                            <div class="flex gap-2">
+                                <input type="text" id="track-input" placeholder="e.g. 9811223344 or APP-2025-101" class="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                <button onclick="trackAdmissionStatus()" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">Check</button>
+                            </div>
+                            <div id="track-result" class="mt-3"></div>
+                        </div>
+
+                        <div class="bg-indigo-50 rounded-2xl border border-indigo-100 p-5 text-xs text-indigo-950 space-y-2.5">
+                            <h4 class="font-extrabold text-sm text-indigo-900 flex items-center gap-2">
+                                <i class="fa-solid fa-circle-info"></i> Admission & Approval Workflow
+                            </h4>
+                            <p>1. <strong>Student Submission:</strong> Submit your form with photo & mobile number (Aadhaar is optional).</p>
+                            <p>2. <strong>Verification & Approval:</strong> Your form goes to the Admin & Operator queue. Once approved, an official <strong>Registration Number</strong> and <strong>Roll Number</strong> are generated automatically.</p>
+                            <p>3. <strong>Exam & A4 Marksheet:</strong> Approved students can appear in exams and download their <strong>A4 PDF Marksheet with QR Verification</strong>.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function handleAdmissionPhotoChange(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            try {
+                const compressed = await compressImageToDataURL(file);
+                uploadedAdmissionPhotoDataUrl = compressed;
+                document.getElementById('adm-photo-preview').src = compressed;
+                showToast('Photo compressed & ready for upload!', 'success');
+            } catch (err) {
+                showToast('Could not process image. Please choose another file.', 'error');
+            }
+        }
+
+        function handleAdmissionSubmit(event) {
+            event.preventDefault();
+            const gender = document.getElementById('adm-gender').value;
+            const defaultPic = gender === 'Female' ? DEFAULT_AVATAR_GIRL : DEFAULT_AVATAR_BOY;
+            const appNumber = 101 + db.admissions.length;
+            const newApp = {
+                appId: `APP-2025-${appNumber}`,
+                name: document.getElementById('adm-name').value.trim(),
+                fatherName: document.getElementById('adm-father').value.trim(),
+                motherName: document.getElementById('adm-mother').value.trim(),
+                dob: document.getElementById('adm-dob').value,
+                gender: gender,
+                className: document.getElementById('adm-class').value,
+                mobile: document.getElementById('adm-mobile').value.trim(),
+                aadhaar: document.getElementById('adm-aadhaar').value.trim(),
+                address: document.getElementById('adm-address').value.trim(),
+                photo: uploadedAdmissionPhotoDataUrl || defaultPic,
+                status: 'pending',
+                appliedDate: new Date().toISOString().split('T')[0]
+            };
+
+            db.admissions.unshift(newApp);
+            uploadedAdmissionPhotoDataUrl = '';
+            saveState();
+            renderCurrentPortal();
+            showToast(`Application Submitted! Your ID is ${newApp.appId}`, 'success');
+
+            const trackInput = document.getElementById('track-input');
+            if (trackInput) {
+                trackInput.value = newApp.appId;
+                trackAdmissionStatus();
+            }
+        }
+
+        function trackAdmissionStatus() {
+            const q = document.getElementById('track-input').value.trim().toLowerCase();
+            const resBox = document.getElementById('track-result');
+            if (!q) return;
+
+            const found = db.admissions.find(a => a.appId.toLowerCase() === q || a.mobile === q);
+            if (!found) {
+                resBox.innerHTML = `<p class="text-xs text-rose-600 font-semibold">No application found for "${q}".</p>`;
+                return;
+            }
+
+            const badgeClass = found.status === 'approved'
+                ? 'bg-emerald-100 text-emerald-800'
+                : found.status === 'rejected'
+                    ? 'bg-rose-100 text-rose-800'
+                    : 'bg-amber-100 text-amber-800';
+
+            resBox.innerHTML = `
+                <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-slate-900">${found.name}</span>
+                        <span class="px-2 py-0.5 rounded-full font-bold uppercase text-[10px] ${badgeClass}">${found.status}</span>
+                    </div>
+                    <p class="text-slate-600">App ID: <strong>${found.appId}</strong> • Class: <strong>${found.className}</strong></p>
+                    ${found.generatedRegNo ? `<p class="text-emerald-700 font-bold">Reg No: ${found.generatedRegNo} | Roll No: ${found.generatedRollNo}</p>` : ''}
+                </div>
+            `;
+        }
+
+        // =========================================================================
+        // 6. ADMIN DASHBOARD
+        // =========================================================================
+        function approveAdmission(appId, approverRole) {
+            if (approverRole === 'operator' && !db.settings.operatorCanApprove) {
+                showToast('Admin has disabled Operator approval permission.', 'error');
+                return;
+            }
+            const app = db.admissions.find(a => a.appId === appId);
+            if (!app || app.status !== 'pending') return;
+
+            const nextNum = db.students.length + 1;
+            const regNo = `VBPS-2025-${String(nextNum).padStart(3, '0')}`;
+            const classDigits = app.className.replace(/\D/g, '') || '1';
+            const rollNo = `${classDigits}${String(nextNum).padStart(2, '0')}`;
+
+            app.status = 'approved';
+            app.approvedBy = approverRole.toUpperCase();
+            app.generatedRegNo = regNo;
+            app.generatedRollNo = rollNo;
+
+            const newStudent = {
+                id: `STU-${1000 + nextNum}`,
+                regNo: regNo,
+                rollNo: rollNo,
+                name: app.name,
+                fatherName: app.fatherName,
+                motherName: app.motherName,
+                dob: app.dob,
+                gender: app.gender,
+                className: app.className,
+                mobile: app.mobile,
+                aadhaar: app.aadhaar,
+                address: app.address,
+                photo: app.photo,
+                offlineMarks: {},
+                termPapers: {},
+                onlineMarks: {}
+            };
+
+            db.students.push(newStudent);
+            saveState();
+            renderCurrentPortal();
+            showToast(`Approved ${app.name}! Assigned Reg No: ${regNo}`, 'success');
+        }
+
+        function rejectAdmission(appId, approverRole) {
+            if (approverRole === 'operator' && !db.settings.operatorCanApprove) {
+                showToast('Admin has disabled Operator approval permission.', 'error');
+                return;
+            }
+            const app = db.admissions.find(a => a.appId === appId);
+            if (!app) return;
+            app.status = 'rejected';
+            saveState();
+            renderCurrentPortal();
+            showToast(`Application ${appId} rejected.`, 'warning');
+        }
+
+        function renderAdminPortal(container) {
+            const pendingCount = db.admissions.filter(a => a.status === 'pending').length;
+
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-800 text-xs font-extrabold uppercase">Super Admin</span>
+                                <h2 class="text-xl font-extrabold text-slate-900">School Control Center</h2>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-0.5">Manage permissions, approve admissions, assign teachers to subjects, and view all records.</p>
+                        </div>
+
+                        <div class="flex flex-wrap gap-1.5 bg-slate-100 p-1.5 rounded-xl">
+                            <button onclick="adminTab='controls'; renderCurrentPortal()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${adminTab === 'controls' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                                <i class="fa-solid fa-sliders mr-1"></i> System Controls
+                            </button>
+                            <button onclick="adminTab='subjects'; renderCurrentPortal()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${adminTab === 'subjects' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                                <i class="fa-solid fa-book mr-1"></i> Subjects (${db.subjects.length})
+                            </button>
+                            <button onclick="adminTab='admissions'; renderCurrentPortal()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${adminTab === 'admissions' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                                <i class="fa-solid fa-user-check mr-1"></i> Admissions (${pendingCount})
+                            </button>
+                            <button onclick="adminTab='teachers'; renderCurrentPortal()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${adminTab === 'teachers' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                                <i class="fa-solid fa-chalkboard-user mr-1"></i> Teacher Subjects
+                            </button>
+                            <button onclick="adminTab='exams'; renderCurrentPortal()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${adminTab === 'exams' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                                <i class="fa-solid fa-laptop-file mr-1"></i> Online Exams
+                            </button>
+                            <button onclick="adminTab='records'; renderCurrentPortal()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${adminTab === 'records' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}">
+                                <i class="fa-solid fa-database mr-1"></i> All Records (${db.students.length})
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="admin-tab-body"></div>
+                </div>
+            `;
+
+            const body = document.getElementById('admin-tab-body');
+            if (adminTab === 'controls') renderAdminControlsTab(body);
+            else if (adminTab === 'subjects') renderAdminSubjectsTab(body);
+            else if (adminTab === 'admissions') renderAdminAdmissionsTab(body);
+            else if (adminTab === 'teachers') renderAdminTeachersTab(body);
+            else if (adminTab === 'exams') renderAdminExamsTab(body);
+            else if (adminTab === 'records') renderAllRecordsTable(body, 'admin');
+        }
+
+        function renderAdminSubjectsTab(container) {
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm h-fit">
+                        <h3 class="font-bold text-slate-900 text-base mb-1">Add New Subject</h3>
+                        <p class="text-xs text-slate-500 mb-4">Each subject carries 100 Marks per term (10 Viva + 20 Test + 70 Theory) across Quarterly, Half-Yearly & Yearly exams.</p>
+                        <form onsubmit="handleAddSubject(event)" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">Subject Name</label>
+                                <input type="text" id="new-subject-name" required placeholder="e.g. Sanskrit, General Knowledge, Drawing" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
+                            </div>
+                            <button type="submit" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">
+                                <i class="fa-solid fa-plus mr-1"></i> Add Subject to Curriculum
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="lg:col-span-2 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base">Active School Subjects (${db.subjects.length})</h3>
+                                <p class="text-xs text-slate-500">Maximum Marks per Subject: <strong>100</strong> (Viva: 10 • Test: 20 • Theory: 70)</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            ${db.subjects.map((sub, idx) => `
+                                <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                                    <div>
+                                        <p class="font-bold text-slate-900 text-sm">${idx + 1}. ${sub}</p>
+                                        <p class="text-[11px] text-slate-500">10 Viva + 20 Test + 70 Theory = 100 Marks</p>
+                                    </div>
+                                    <button onclick="handleRemoveSubject('${sub.replace(/'/g, "\\'")}')" class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition">
+                                        <i class="fa-solid fa-trash-can mr-1"></i> Remove
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleAddSubject(e) {
+            e.preventDefault();
+            const input = document.getElementById('new-subject-name');
+            const name = input.value.trim();
+            if (!name) return;
+            if (db.subjects.some(s => s.toLowerCase() === name.toLowerCase())) {
+                showToast('This subject already exists!', 'warning');
+                return;
+            }
+            db.subjects.push(name);
+            saveState();
+            renderCurrentPortal();
+            showToast(`Subject "${name}" added!`, 'success');
+        }
+
+        function handleRemoveSubject(subName) {
+            if (db.subjects.length <= 1) {
+                showToast('At least one subject must remain in the curriculum.', 'error');
+                return;
+            }
+            openConfirmModal(
+                `Remove Subject "${subName}"?`,
+                `This will remove ${subName} from marksheets, teacher subject allocations, and future mark entries.`,
+                () => {
+                    db.subjects = db.subjects.filter(s => s !== subName);
+                    db.teachers.forEach(t => {
+                        t.assignments = t.assignments.filter(a => a.subject !== subName);
+                    });
+                    saveState();
+                    renderCurrentPortal();
+                    showToast(`Subject "${subName}" removed.`, 'info');
+                }
+            );
+        }
+
+        function renderAdminControlsTab(container) {
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                                    <i class="fa-solid fa-door-open text-lg"></i>
+                                </span>
+                                <span class="text-xs font-extrabold px-2.5 py-1 rounded-full ${db.settings.admissionOpen ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                                    ${db.settings.admissionOpen ? 'ACTIVE / OPEN' : 'CLOSED'}
+                                </span>
+                            </div>
+                            <h3 class="font-bold text-slate-900 text-base">Student Admission Portal</h3>
+                            <p class="text-xs text-slate-500 mt-1">When OPEN, students can fill out the online admission form with photo, mobile & optional Aadhaar.</p>
+                        </div>
+                        <button onclick="toggleSetting('admissionOpen')" class="mt-5 w-full py-2.5 rounded-xl font-bold text-xs transition ${db.settings.admissionOpen ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'}">
+                            ${db.settings.admissionOpen ? 'Close Admission Portal' : 'Open Admission Portal'}
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center">
+                                    <i class="fa-solid fa-user-shield text-lg"></i>
+                                </span>
+                                <span class="text-xs font-extrabold px-2.5 py-1 rounded-full ${db.settings.operatorCanApprove ? 'bg-sky-100 text-sky-800' : 'bg-slate-200 text-slate-700'}">
+                                    ${db.settings.operatorCanApprove ? 'ALLOWED' : 'RESTRICTED'}
+                                </span>
+                            </div>
+                            <h3 class="font-bold text-slate-900 text-base">Operator Admission Approval</h3>
+                            <p class="text-xs text-slate-500 mt-1">Allow Data Entry Operators to verify and approve student admission applications on your behalf.</p>
+                        </div>
+                        <button onclick="toggleSetting('operatorCanApprove')" class="mt-5 w-full py-2.5 rounded-xl font-bold text-xs transition ${db.settings.operatorCanApprove ? 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200' : 'bg-sky-600 text-white hover:bg-sky-700'}">
+                            ${db.settings.operatorCanApprove ? 'Revoke Operator Approval Rights' : 'Allow Operator to Approve'}
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                                    <i class="fa-solid fa-pen-to-square text-lg"></i>
+                                </span>
+                                <span class="text-xs font-extrabold px-2.5 py-1 rounded-full ${db.settings.teachersCanEditMarks ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                                    ${db.settings.teachersCanEditMarks ? 'UNLOCKED' : 'LOCKED'}
+                                </span>
+                            </div>
+                            <h3 class="font-bold text-slate-900 text-base">Teacher Offline Marks Entry</h3>
+                            <p class="text-xs text-slate-500 mt-1">Allow teachers to enter or update offline exam marks for their assigned subjects. Lock after result finalization.</p>
+                        </div>
+                        <button onclick="toggleSetting('teachersCanEditMarks')" class="mt-5 w-full py-2.5 rounded-xl font-bold text-xs transition ${db.settings.teachersCanEditMarks ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'}">
+                            ${db.settings.teachersCanEditMarks ? 'Lock Marks Entry Now' : 'Unlock Marks Entry for Teachers'}
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                                    <i class="fa-solid fa-laptop-code text-lg"></i>
+                                </span>
+                                <span class="text-xs font-extrabold px-2.5 py-1 rounded-full ${db.settings.onlineExamAllowed ? 'bg-indigo-100 text-indigo-800' : 'bg-purple-100 text-purple-800'}">
+                                    ${db.settings.onlineExamAllowed ? 'ONLINE ALLOWED' : 'OFFLINE 100M MODE'}
+                                </span>
+                            </div>
+                            <h3 class="font-bold text-slate-900 text-base">Online Exam Permission</h3>
+                            <p class="text-xs text-slate-500 mt-1">If OFF, Online Exams are disabled and results evaluate Quarterly, Half-Yearly & Yearly (10 Viva + 20 Test + 70 Theory = 100).</p>
+                        </div>
+                        <button onclick="toggleSetting('onlineExamAllowed')" class="mt-5 w-full py-2.5 rounded-xl font-bold text-xs transition ${db.settings.onlineExamAllowed ? 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200' : 'bg-indigo-600 text-white hover:bg-indigo-700'}">
+                            ${db.settings.onlineExamAllowed ? 'Disable Online Exam (Use 100M Term Mode)' : 'Allow Online Exams for Students'}
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-5 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                        <h4 class="font-bold text-sm text-slate-900">Active Examination Session Title (Printed on A4 Marksheet)</h4>
+                        <p class="text-xs text-slate-500">Current: <strong>${db.settings.activeExamTerm}</strong></p>
+                    </div>
+                    <div class="flex w-full sm:w-auto gap-2">
+                        <input type="text" id="exam-term-input" value="${db.settings.activeExamTerm}" class="flex-1 sm:w-72 px-3.5 py-2 rounded-xl border border-slate-300 text-sm">
+                        <button onclick="updateExamTerm()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">Save Title</button>
+                    </div>
+                </div>
+
+                <div class="mt-5 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                    <h4 class="font-bold text-sm text-slate-900 mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-key text-indigo-600"></i> Portal Login Passwords Management
+                    </h4>
+                    <p class="text-xs text-slate-500 mb-4">Update Admin and Operator passwords to keep school records protected.</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1">
+                                <label class="block text-[11px] font-bold uppercase text-slate-600 mb-1">Admin Password</label>
+                                <input type="text" id="admin-pass-input" value="${db.settings.adminPassword}" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono">
+                            </div>
+                            <button onclick="updatePortalPasswords()" class="mt-5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold">Update</button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1">
+                                <label class="block text-[11px] font-bold uppercase text-slate-600 mb-1">Operator Password</label>
+                                <input type="text" id="operator-pass-input" value="${db.settings.operatorPassword}" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono">
+                            </div>
+                            <button onclick="updatePortalPasswords()" class="mt-5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold">Update</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updatePortalPasswords() {
+            const aPass = document.getElementById('admin-pass-input').value.trim();
+            const oPass = document.getElementById('operator-pass-input').value.trim();
+            if (!aPass || !oPass) {
+                showToast('Passwords cannot be empty.', 'error');
+                return;
+            }
+            db.settings.adminPassword = aPass;
+            db.settings.operatorPassword = oPass;
+            saveState();
+            showToast('Admin & Operator passwords updated!', 'success');
+        }
+
+        function toggleSetting(key) {
+            db.settings[key] = !db.settings[key];
+            saveState();
+            renderCurrentPortal();
+            showToast('System setting updated!', 'success');
+        }
+
+        function updateExamTerm() {
+            const val = document.getElementById('exam-term-input').value.trim();
+            if (!val) return;
+            db.settings.activeExamTerm = val;
+            saveState();
+            renderCurrentPortal();
+            showToast('Examination title updated!', 'success');
+        }
+
+        function renderAdminAdmissionsTab(container) {
+            container.innerHTML = `
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h3 class="font-bold text-slate-900">Student Admission Applications</h3>
+                            <p class="text-xs text-slate-500">Approve applications to generate official Registration Number & Roll Number.</p>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                                    <th class="p-3.5">Photo & App ID</th>
+                                    <th class="p-3.5">Student & Parents</th>
+                                    <th class="p-3.5">Class & DOB</th>
+                                    <th class="p-3.5">Mobile & Aadhaar</th>
+                                    <th class="p-3.5">Status</th>
+                                    <th class="p-3.5 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-sm">
+                                ${db.admissions.map(app => `
+                                    <tr class="hover:bg-slate-50/80">
+                                        <td class="p-3.5">
+                                            <div class="flex items-center gap-2.5">
+                                                <img src="${app.photo}" class="w-10 h-12 rounded-lg object-cover border border-slate-200">
+                                                <div>
+                                                    <span class="font-bold text-indigo-700 text-xs block">${app.appId}</span>
+                                                    <span class="text-[11px] text-slate-400">${app.appliedDate}</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="p-3.5">
+                                            <p class="font-bold text-slate-900">${app.name}</p>
+                                            <p class="text-xs text-slate-500">F: ${app.fatherName} | M: ${app.motherName}</p>
+                                        </td>
+                                        <td class="p-3.5">
+                                            <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-bold text-xs">${app.className}</span>
+                                            <p class="text-xs text-slate-500 mt-1">DOB: ${app.dob}</p>
+                                        </td>
+                                        <td class="p-3.5 text-xs">
+                                            <p class="font-semibold text-slate-800"><i class="fa-solid fa-phone text-slate-400 mr-1"></i>${app.mobile}</p>
+                                            <p class="text-slate-500 mt-0.5">Aadhaar: ${app.aadhaar || '<span class="italic text-slate-400">Not Provided</span>'}</p>
+                                        </td>
+                                        <td class="p-3.5">
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase ${app.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : app.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}">
+                                                ${app.status}
+                                            </span>
+                                            ${app.generatedRegNo ? `<p class="text-[11px] font-bold text-emerald-700 mt-1">${app.generatedRegNo}</p>` : ''}
+                                        </td>
+                                        <td class="p-3.5 text-right">
+                                            ${app.status === 'pending' ? `
+                                                <div class="inline-flex gap-1.5">
+                                                    <button onclick="approveAdmission('${app.appId}', 'admin')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">
+                                                        <i class="fa-solid fa-check mr-1"></i>Approve
+                                                    </button>
+                                                    <button onclick="rejectAdmission('${app.appId}', 'admin')" class="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold">
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            ` : `<span class="text-xs text-slate-400">Processed</span>`}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderAdminTeachersTab(container) {
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm h-fit space-y-5">
+                        <div>
+                            <h3 class="font-bold text-slate-900 text-base mb-1">Assign Subject to Teacher</h3>
+                            <p class="text-xs text-slate-500 mb-4">Teachers can ONLY enter offline marks for classes & subjects assigned here.</p>
+                            <form onsubmit="handleAssignSubject(event)" class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 mb-1">Select Teacher</label>
+                                    <select id="assign-teacher-id" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white">
+                                        ${db.teachers.map(t => `<option value="${t.id}">${t.name} (${t.id})</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Class</label>
+                                        <select id="assign-class" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white">
+                                            ${ALL_CLASSES.map(c => `<option value="${c}" ${c === 'Class 8' ? 'selected' : ''}>${c}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Subject</label>
+                                        <select id="assign-subject" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white">
+                                            ${db.subjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                </div>
+                                <button type="submit" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">
+                                    <i class="fa-solid fa-plus mr-1"></i> Allocate Subject
+                                </button>
+                            </form>
+                        </div>
+
+                        <hr class="border-slate-200">
+
+                        <div>
+                            <h4 class="font-bold text-slate-900 text-sm mb-2">Register New Teacher</h4>
+                            <form onsubmit="handleAddTeacher(event)" class="space-y-2.5">
+                                <input type="text" id="new-teacher-name" required placeholder="Teacher Name (e.g. Mrs. Sunita Joshi)" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="text" id="new-teacher-qual" required placeholder="Qualification (M.Sc, B.Ed)" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                    <input type="tel" id="new-teacher-mob" required placeholder="Mobile No." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                </div>
+                                <input type="text" id="new-teacher-pass" required placeholder="Set Login Password" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono">
+                                <button type="submit" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold">Add Teacher</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 space-y-4">
+                        ${db.teachers.map(teacher => `
+                            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                    <div>
+                                        <h4 class="font-bold text-slate-900 text-base">${teacher.name} <span class="text-xs font-normal text-slate-500">(${teacher.qualification})</span></h4>
+                                        <p class="text-xs text-slate-500">ID: <strong>${teacher.id}</strong> • Mobile: ${teacher.mobile} • Password: <span class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-800">${teacher.password}</span></p>
+                                    </div>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    ${teacher.assignments.length === 0 ? '<span class="text-xs text-slate-400 italic">No subjects assigned yet.</span>' : teacher.assignments.map((a, idx) => `
+                                        <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-800 border border-indigo-200 text-xs font-semibold">
+                                            <span><strong>${a.className}</strong> — ${a.subject}</span>
+                                            <button onclick="removeTeacherAssignment('${teacher.id}', ${idx})" class="text-indigo-400 hover:text-rose-600" title="Remove">
+                                                <i class="fa-solid fa-circle-xmark"></i>
+                                            </button>
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleAssignSubject(e) {
+            e.preventDefault();
+            const tid = document.getElementById('assign-teacher-id').value;
+            const cls = document.getElementById('assign-class').value;
+            const sub = document.getElementById('assign-subject').value;
+            const teacher = db.teachers.find(t => t.id === tid);
+            if (!teacher) return;
+
+            const exists = teacher.assignments.some(a => a.className === cls && a.subject === sub);
+            if (exists) {
+                showToast('This class & subject is already assigned to this teacher.', 'warning');
+                return;
+            }
+            teacher.assignments.push({ className: cls, subject: sub });
+            saveState();
+            renderCurrentPortal();
+            showToast(`Assigned ${cls} ${sub} to ${teacher.name}`, 'success');
+        }
+
+        function removeTeacherAssignment(tid, idx) {
+            const teacher = db.teachers.find(t => t.id === tid);
+            if (!teacher) return;
+            teacher.assignments.splice(idx, 1);
+            saveState();
+            renderCurrentPortal();
+            showToast('Subject allocation removed.', 'info');
+        }
+
+        function handleAddTeacher(e) {
+            e.preventDefault();
+            const newId = 'TCH-0' + (db.teachers.length + 1);
+            db.teachers.push({
+                id: newId,
+                name: document.getElementById('new-teacher-name').value.trim(),
+                qualification: document.getElementById('new-teacher-qual').value.trim(),
+                mobile: document.getElementById('new-teacher-mob').value.trim(),
+                password: document.getElementById('new-teacher-pass').value.trim() || 'teach123',
+                assignments: []
+            });
+            saveState();
+            renderCurrentPortal();
+            showToast(`New teacher registered! ID: ${newId}`, 'success');
+        }
+
+        function renderAdminExamsTab(container) {
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm h-fit">
+                        <h3 class="font-bold text-slate-900 text-base mb-1">Create Online MCQ Exam</h3>
+                        <p class="text-xs text-slate-500 mb-4">Students in the selected class can attempt this online test when Online Exam is enabled.</p>
+                        <form onsubmit="handleCreateOnlineExam(event)" class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">Exam Title</label>
+                                <input type="text" id="new-exam-title" required placeholder="e.g. Class 8 Computer Mock Test" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 mb-1">Class</label>
+                                    <select id="new-exam-class" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white">
+                                        ${ALL_CLASSES.map(c => `<option value="${c}" ${c === 'Class 8' ? 'selected' : ''}>${c}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 mb-1">Subject</label>
+                                    <select id="new-exam-subject" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white">
+                                        ${db.subjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                                <p class="text-xs font-bold text-slate-700">Sample Question 1 (20 Marks)</p>
+                                <input type="text" id="new-exam-q1" required placeholder="Enter MCQ Question" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-xs">
+                                <div class="grid grid-cols-2 gap-1.5">
+                                    <input type="text" id="new-exam-o0" required placeholder="Option A" class="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs">
+                                    <input type="text" id="new-exam-o1" required placeholder="Option B" class="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs">
+                                    <input type="text" id="new-exam-o2" required placeholder="Option C" class="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs">
+                                    <input type="text" id="new-exam-o3" required placeholder="Option D" class="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs">
+                                </div>
+                                <select id="new-exam-ans" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white">
+                                    <option value="0">Correct Answer: Option A</option>
+                                    <option value="1">Correct Answer: Option B</option>
+                                    <option value="2">Correct Answer: Option C</option>
+                                    <option value="3">Correct Answer: Option D</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">
+                                Publish Online Exam
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="lg:col-span-2 space-y-3">
+                        ${db.onlineExams.map(ex => `
+                            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[11px] font-bold">${ex.className}</span>
+                                        <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[11px] font-bold">${ex.subject}</span>
+                                        <span class="text-xs text-slate-500"><i class="fa-regular fa-clock"></i> ${ex.durationMinutes} Mins</span>
+                                    </div>
+                                    <h4 class="font-bold text-slate-900">${ex.title}</h4>
+                                    <p class="text-xs text-slate-500 mt-0.5">${ex.questions.length} MCQ Questions • Max Online Marks: ${ex.totalMarks}</p>
+                                </div>
+                                <button onclick="switchPortal('student')" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold shrink-0">
+                                    Preview in Student Portal
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleCreateOnlineExam(e) {
+            e.preventDefault();
+            db.onlineExams.push({
+                id: 'EXM-' + (101 + db.onlineExams.length),
+                title: document.getElementById('new-exam-title').value.trim(),
+                className: document.getElementById('new-exam-class').value,
+                subject: document.getElementById('new-exam-subject').value,
+                durationMinutes: 5,
+                totalMarks: 20,
+                active: true,
+                questions: [
+                    {
+                        q: document.getElementById('new-exam-q1').value.trim(),
+                        options: [
+                            document.getElementById('new-exam-o0').value.trim(),
+                            document.getElementById('new-exam-o1').value.trim(),
+                            document.getElementById('new-exam-o2').value.trim(),
+                            document.getElementById('new-exam-o3').value.trim()
+                        ],
+                        answer: parseInt(document.getElementById('new-exam-ans').value, 10)
+                    }
+                ]
+            });
+            saveState();
+            renderCurrentPortal();
+            showToast('Online MCQ Exam published!', 'success');
+        }
+
+        // Shared Complete Student Records & Print Table
+        let recordFilterClass = 'ALL';
+        let recordSearchQuery = '';
+
+        function renderAllRecordsTable(container, role) {
+            const filtered = db.students.filter(s => {
+                const matchClass = recordFilterClass === 'ALL' || s.className === recordFilterClass;
+                const q = recordSearchQuery.toLowerCase();
+                const matchQuery = !q || s.name.toLowerCase().includes(q) || s.regNo.toLowerCase().includes(q) || s.mobile.includes(q);
+                return matchClass && matchQuery;
+            });
+
+            container.innerHTML = `
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <h3 class="font-bold text-slate-900">All Approved Student Records & A4 Marksheet Desk</h3>
+                            <p class="text-xs text-slate-500">Accessible ONLY by Admin & Operator. Generate or print A4 QR-verified marksheets & ID cards.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <input type="text" value="${recordSearchQuery}" oninput="recordSearchQuery=this.value; renderCurrentPortal()" placeholder="Search Name, Reg No, Mobile..." class="px-3 py-2 rounded-xl border border-slate-300 text-xs w-48">
+                            <select onchange="recordFilterClass=this.value; renderCurrentPortal()" class="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white">
+                                <option value="ALL">All Classes</option>
+                                ${ALL_CLASSES.map(c => `<option value="${c}" ${recordFilterClass === c ? 'selected' : ''}>${c}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                                    <th class="p-3.5">Student</th>
+                                    <th class="p-3.5">Reg No & Roll</th>
+                                    <th class="p-3.5">Class</th>
+                                    <th class="p-3.5">Mobile / Aadhaar</th>
+                                    <th class="p-3.5">Result Summary</th>
+                                    <th class="p-3.5 text-right">A4 Marksheet & ID Card</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 text-sm">
+                                ${filtered.map(stu => {
+                                    const summary = calculateStudentResult(stu);
+                                    return `
+                                        <tr class="hover:bg-slate-50/80">
+                                            <td class="p-3.5">
+                                                <div class="flex items-center gap-2.5">
+                                                    <img src="${stu.photo}" class="w-10 h-12 rounded-lg object-cover border border-slate-200">
+                                                    <div>
+                                                        <p class="font-bold text-slate-900">${stu.name}</p>
+                                                        <p class="text-xs text-slate-500">S/o ${stu.fatherName}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="p-3.5 text-xs">
+                                                <p class="font-bold text-indigo-700">${stu.regNo}</p>
+                                                <p class="text-slate-500">Roll No: ${stu.rollNo}</p>
+                                            </td>
+                                            <td class="p-3.5">
+                                                <span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-bold text-xs">${stu.className}</span>
+                                            </td>
+                                            <td class="p-3.5 text-xs">
+                                                <p class="font-medium text-slate-800">${stu.mobile}</p>
+                                                <p class="text-slate-400">${stu.aadhaar || 'Aadhaar: N/A'}</p>
+                                            </td>
+                                            <td class="p-3.5 text-xs">
+                                                <p class="font-bold text-slate-900">${summary.grandObtained} / ${summary.grandMax} (${summary.percentage}%)</p>
+                                                <span class="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] font-extrabold ${summary.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                                                    ${summary.passed ? 'PASS • Grade ' + summary.grade : 'FAIL'}
+                                                </span>
+                                            </td>
+                                            <td class="p-3.5 text-right space-x-1">
+                                                <button onclick="openIdCardModal('${stu.id}')" class="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition">
+                                                    <i class="fa-solid fa-id-card"></i> ID Card
+                                                </button>
+                                                <button onclick="openMarksheetModal('${stu.id}')" class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition">
+                                                    <i class="fa-solid fa-print"></i> Marksheet
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // =========================================================================
+        // 7. OPERATOR DASHBOARD
+        // =========================================================================
+        function renderOperatorPortal(container) {
+            const pendingCount = db.admissions.filter(a => a.status === 'pending').length;
+
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-0.5 rounded-md bg-sky-100 text-sky-800 text-xs font-extrabold uppercase">Office Operator</span>
+                                <h2 class="text-xl font-extrabold text-slate-900">Admission Verification & Result Print Desk</h2>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-0.5">View all student records, print A4 marksheets for handover, and approve admissions (when allowed by Admin).</p>
+                        </div>
+
+                        <div class="flex gap-1.5 bg-slate-100 p-1.5 rounded-xl">
+                            <button onclick="operatorTab='admissions'; renderCurrentPortal()" class="px-3.5 py-2 rounded-lg text-xs font-bold transition ${operatorTab === 'admissions' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-600'}">
+                                <i class="fa-solid fa-user-check mr-1"></i> Admission Queue (${pendingCount})
+                            </button>
+                            <button onclick="operatorTab='records'; renderCurrentPortal()" class="px-3.5 py-2 rounded-lg text-xs font-bold transition ${operatorTab === 'records' ? 'bg-white text-sky-700 shadow-xs' : 'text-slate-600'}">
+                                <i class="fa-solid fa-print mr-1"></i> Print Student Marksheets (${db.students.length})
+                            </button>
+                        </div>
+                    </div>
+
+                    ${!db.settings.operatorCanApprove && operatorTab === 'admissions' ? `
+                        <div class="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-center gap-3 text-amber-900">
+                            <i class="fa-solid fa-lock text-xl text-amber-600"></i>
+                            <div class="text-xs sm:text-sm">
+                                <strong>Approval Permission Disabled by Admin:</strong> You can view incoming admission forms, but only the Admin can approve/reject them right now.
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <div id="operator-tab-body"></div>
+                </div>
+            `;
+
+            const body = document.getElementById('operator-tab-body');
+            if (operatorTab === 'admissions') {
+                body.innerHTML = `
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                                        <th class="p-3.5">Photo & App ID</th>
+                                        <th class="p-3.5">Student Details</th>
+                                        <th class="p-3.5">Class</th>
+                                        <th class="p-3.5">Contact & Aadhaar</th>
+                                        <th class="p-3.5">Status</th>
+                                        <th class="p-3.5 text-right">Operator Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 text-sm">
+                                    ${db.admissions.map(app => `
+                                        <tr>
+                                            <td class="p-3.5">
+                                                <div class="flex items-center gap-2.5">
+                                                    <img src="${app.photo}" class="w-10 h-12 rounded-lg object-cover border border-slate-200">
+                                                    <span class="font-bold text-indigo-700 text-xs">${app.appId}</span>
+                                                </div>
+                                            </td>
+                                            <td class="p-3.5">
+                                                <p class="font-bold text-slate-900">${app.name}</p>
+                                                <p class="text-xs text-slate-500">S/o ${app.fatherName}</p>
+                                            </td>
+                                            <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-slate-100 font-bold text-xs">${app.className}</span></td>
+                                            <td class="p-3.5 text-xs">
+                                                <p>${app.mobile}</p>
+                                                <p class="text-slate-400">Aadhaar: ${app.aadhaar || 'Optional / Blank'}</p>
+                                            </td>
+                                            <td class="p-3.5">
+                                                <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase ${app.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : app.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}">
+                                                    ${app.status}
+                                                </span>
+                                            </td>
+                                            <td class="p-3.5 text-right">
+                                                ${app.status === 'pending' ? (
+                                                    db.settings.operatorCanApprove ? `
+                                                        <button onclick="approveAdmission('${app.appId}', 'operator')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">
+                                                            <i class="fa-solid fa-check mr-1"></i>Approve
+                                                        </button>
+                                                        <button onclick="rejectAdmission('${app.appId}', 'operator')" class="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold ml-1">
+                                                            Reject
+                                                        </button>
+                                                    ` : `<span class="text-xs font-semibold text-slate-400"><i class="fa-solid fa-lock mr-1"></i>Locked by Admin</span>`
+                                                ) : `<span class="text-xs text-slate-400">Completed</span>`}
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            } else {
+                renderAllRecordsTable(body, 'operator');
+            }
+        }
+
+        // =========================================================================
+        // 8. TEACHER DASHBOARD (Live-Updating Term Total 100 & Final Total 300)
+        // =========================================================================
+        function renderTeacherPortal(container) {
+            const teacher = db.teachers.find(t => t.id === authSession.teacherId);
+            if (!teacher) {
+                authSession.teacherId = null;
+                renderCurrentPortal();
+                return;
+            }
+
+            if (!selectedTeacherClassSub || !teacher.assignments.some(a => `${a.className}|${a.subject}` === selectedTeacherClassSub)) {
+                selectedTeacherClassSub = teacher.assignments.length > 0
+                    ? `${teacher.assignments[0].className}|${teacher.assignments[0].subject}`
+                    : null;
+            }
+
+            const [activeClass, activeSubject] = selectedTeacherClassSub ? selectedTeacherClassSub.split('|') : [null, null];
+            const classStudents = activeClass ? db.students.filter(s => s.className === activeClass) : [];
+            const activeTermObj = EXAM_TERMS.find(t => t.key === selectedTeacherTerm) || EXAM_TERMS[2];
+
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-extrabold uppercase">Faculty Portal</span>
+                                <h2 class="text-xl font-extrabold text-slate-900">Welcome, ${teacher.name}</h2>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-0.5">ID: <strong>${teacher.id}</strong> • Enter <strong>10 Viva + 20 Test + 70 Theory = 100 Marks</strong> across Quarterly, Half-Yearly & Yearly terms.</p>
+                        </div>
+
+                        <button onclick="logoutCurrentUser()" class="px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold self-start md:self-auto">
+                            <i class="fa-solid fa-right-from-bracket mr-1"></i> Logout Faculty
+                        </button>
+                    </div>
+
+                    ${!db.settings.teachersCanEditMarks ? `
+                        <div class="bg-rose-50 border border-rose-300 rounded-2xl p-4 flex items-center gap-3 text-rose-900">
+                            <i class="fa-solid fa-lock text-xl text-rose-600"></i>
+                            <div class="text-xs sm:text-sm">
+                                <strong>Marks Entry Locked by Admin:</strong> Offline marks are currently in read-only mode. Ask Admin to unlock marks entry to make edits.
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                        <h3 class="text-xs font-bold uppercase text-slate-500 mb-3">1. Select Your Admin-Allocated Class & Subject:</h3>
+                        ${teacher.assignments.length === 0 ? `
+                            <p class="text-sm text-rose-600 font-semibold">No subjects have been assigned to you yet. Ask Admin to allocate subjects.</p>
+                        ` : `
+                            <div class="flex flex-wrap gap-2 mb-5">
+                                ${teacher.assignments.map(a => {
+                                    const key = `${a.className}|${a.subject}`;
+                                    const isSelected = key === selectedTeacherClassSub;
+                                    return `
+                                        <button onclick="selectedTeacherClassSub='${key}'; renderCurrentPortal()" class="px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${isSelected ? 'bg-indigo-600 text-white shadow' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'}">
+                                            <i class="fa-solid fa-book-open"></i> ${a.className} — ${a.subject}
+                                        </button>
+                                    `;
+                                }).join('')}
+                            </div>
+
+                            <h3 class="text-xs font-bold uppercase text-slate-500 mb-2.5">2. Select Exam Term (10 Viva + 20 Test + 70 Theory = 100):</h3>
+                            <div class="flex flex-wrap gap-2 mb-6">
+                                ${EXAM_TERMS.map(term => `
+                                    <button onclick="selectedTeacherTerm='${term.key}'; renderCurrentPortal()" class="px-3.5 py-2 rounded-xl text-xs font-bold transition ${selectedTeacherTerm === term.key ? 'bg-amber-600 text-white shadow-xs' : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200'}">
+                                        <i class="fa-solid fa-calendar-check mr-1"></i> ${term.label}
+                                    </button>
+                                `).join('')}
+                            </div>
+
+                            <div class="border border-slate-200 rounded-xl overflow-hidden">
+                                <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                                    <span class="font-bold text-sm text-slate-900">
+                                        Entering Marks: <span class="text-indigo-700">${activeClass} • ${activeSubject}</span> — <span class="text-amber-700">${activeTermObj.label}</span>
+                                    </span>
+                                    <span class="text-xs text-slate-500">Live Total Updates Automatically While Typing</span>
+                                </div>
+
+                                ${classStudents.length === 0 ? `
+                                    <div class="p-8 text-center text-sm text-slate-500">No approved students found in ${activeClass} yet.</div>
+                                ` : `
+                                    <form onsubmit="saveTeacherMarks(event, '${activeClass}', '${activeSubject}', '${selectedTeacherTerm}')">
+                                        <div class="overflow-x-auto">
+                                            <table class="w-full text-left border-collapse">
+                                                <thead>
+                                                    <tr class="bg-slate-50/60 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                                                        <th class="p-3.5">Roll No</th>
+                                                        <th class="p-3.5">Student Name</th>
+                                                        <th class="p-3.5 text-center">Viva (Max 10)</th>
+                                                        <th class="p-3.5 text-center">Test (Max 20)</th>
+                                                        <th class="p-3.5 text-center">Theory (Max 70)</th>
+                                                        <th class="p-3.5 text-center">${activeTermObj.short} Total (100)</th>
+                                                        <th class="p-3.5 text-center">Final Total (300)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-slate-100 text-sm">
+                                                    ${classStudents.map(stu => {
+                                                        const subTerms = (stu.termPapers && stu.termPapers[activeSubject]) || {};
+                                                        const papers = subTerms[selectedTeacherTerm] || { viva: '', test: '', theory: '' };
+                                                        const termSum = (Number(papers.viva) || 0) + (Number(papers.test) || 0) + (Number(papers.theory) || 0);
+                                                        const otherTermsSum = EXAM_TERMS
+                                                            .filter(t => t.key !== selectedTeacherTerm)
+                                                            .reduce((acc, t) => {
+                                                                const tp = subTerms[t.key] || { viva: 0, test: 0, theory: 0 };
+                                                                return acc + (Number(tp.viva) || 0) + (Number(tp.test) || 0) + (Number(tp.theory) || 0);
+                                                            }, 0);
+                                                        const finalSum = otherTermsSum + termSum;
+                                                        return `
+                                                            <tr data-student-row="${stu.id}" data-other-terms="${otherTermsSum}">
+                                                                <td class="p-3.5 font-bold text-slate-700">${stu.rollNo}</td>
+                                                                <td class="p-3.5">
+                                                                    <p class="font-bold text-slate-900">${stu.name}</p>
+                                                                    <p class="text-[11px] text-slate-400">Reg: ${stu.regNo}</p>
+                                                                </td>
+                                                                <td class="p-3.5 text-center">
+                                                                    <input type="number" min="0" max="10" step="1" oninput="updateLiveRowTotal('${stu.id}')" data-student-id="${stu.id}" data-paper="viva" value="${papers.viva !== undefined ? papers.viva : ''}" ${!db.settings.teachersCanEditMarks ? 'disabled' : ''} placeholder="0-10" class="teacher-paper-input w-20 px-2.5 py-2 rounded-xl border border-slate-300 text-sm font-bold text-center text-slate-900 focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100">
+                                                                </td>
+                                                                <td class="p-3.5 text-center">
+                                                                    <input type="number" min="0" max="20" step="1" oninput="updateLiveRowTotal('${stu.id}')" data-student-id="${stu.id}" data-paper="test" value="${papers.test !== undefined ? papers.test : ''}" ${!db.settings.teachersCanEditMarks ? 'disabled' : ''} placeholder="0-20" class="teacher-paper-input w-20 px-2.5 py-2 rounded-xl border border-slate-300 text-sm font-bold text-center text-slate-900 focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100">
+                                                                </td>
+                                                                <td class="p-3.5 text-center">
+                                                                    <input type="number" min="0" max="70" step="1" oninput="updateLiveRowTotal('${stu.id}')" data-student-id="${stu.id}" data-paper="theory" value="${papers.theory !== undefined ? papers.theory : ''}" ${!db.settings.teachersCanEditMarks ? 'disabled' : ''} placeholder="0-70" class="teacher-paper-input w-20 px-2.5 py-2 rounded-xl border border-slate-300 text-sm font-bold text-center text-slate-900 focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100">
+                                                                </td>
+                                                                <td id="live-term-total-${stu.id}" class="p-3.5 text-center font-extrabold text-indigo-700">${termSum} / 100</td>
+                                                                <td id="live-final-total-${stu.id}" class="p-3.5 text-center font-extrabold text-emerald-700">${finalSum} / 300</td>
+                                                            </tr>
+                                                        `;
+                                                    }).join('')}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        ${db.settings.teachersCanEditMarks ? `
+                                            <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+                                                <button type="submit" class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow transition flex items-center gap-2">
+                                                    <i class="fa-solid fa-floppy-disk"></i> Save ${activeTermObj.label} (${activeSubject}) Marks
+                                                </button>
+                                            </div>
+                                        ` : ''}
+                                    </form>
+                                `}
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateLiveRowTotal(stuId) {
+            const row = document.querySelector(`tr[data-student-row="${stuId}"]`);
+            if (!row) return;
+            const vivaInp = row.querySelector('input[data-paper="viva"]');
+            const testInp = row.querySelector('input[data-paper="test"]');
+            const theoryInp = row.querySelector('input[data-paper="theory"]');
+
+            const viva = vivaInp && vivaInp.value !== '' ? Math.min(10, Math.max(0, parseInt(vivaInp.value, 10) || 0)) : 0;
+            const test = testInp && testInp.value !== '' ? Math.min(20, Math.max(0, parseInt(testInp.value, 10) || 0)) : 0;
+            const theory = theoryInp && theoryInp.value !== '' ? Math.min(70, Math.max(0, parseInt(theoryInp.value, 10) || 0)) : 0;
+
+            const termTotal = viva + test + theory;
+            const otherTerms = Number(row.dataset.otherTerms) || 0;
+            const finalTotal = otherTerms + termTotal;
+
+            const termCell = document.getElementById(`live-term-total-${stuId}`);
+            const finalCell = document.getElementById(`live-final-total-${stuId}`);
+            if (termCell) termCell.textContent = `${termTotal} / 100`;
+            if (finalCell) finalCell.textContent = `${finalTotal} / 300`;
+        }
+
+        function saveTeacherMarks(event, className, subject, termKey) {
+            event.preventDefault();
+            if (!db.settings.teachersCanEditMarks) {
+                showToast('Marks entry is locked by Admin.', 'error');
+                return;
+            }
+            const inputs = document.querySelectorAll('.teacher-paper-input');
+            inputs.forEach(inp => {
+                const stuId = inp.dataset.studentId;
+                const paperKey = inp.dataset.paper;
+                const maxVal = paperKey === 'viva' ? 10 : (paperKey === 'test' ? 20 : 70);
+                const val = inp.value === '' ? 0 : Math.min(maxVal, Math.max(0, parseInt(inp.value, 10)));
+                const student = db.students.find(s => s.id === stuId);
+                if (student) {
+                    if (!student.termPapers) student.termPapers = {};
+                    if (!student.termPapers[subject]) student.termPapers[subject] = {};
+                    if (!student.termPapers[subject][termKey]) student.termPapers[subject][termKey] = { viva: 0, test: 0, theory: 0 };
+                    student.termPapers[subject][termKey][paperKey] = val;
+
+                    const p = student.termPapers[subject][termKey];
+                    student.offlineMarks[subject] = (Number(p.viva) || 0) + (Number(p.test) || 0) + (Number(p.theory) || 0);
+                }
+            });
+            saveState();
+            renderCurrentPortal();
+            showToast(`Saved ${subject} (${termKey}) Viva, Test & Theory marks!`, 'success');
+        }
+
+        // =========================================================================
+        // 9. STUDENT PORTAL (Online Exam Center + A4 PDF Marksheet & QR Code)
+        // =========================================================================
+        function renderStudentPortal(container) {
+            const student = db.students.find(s => s.id === authSession.studentId);
+            if (!student) {
+                authSession.studentId = null;
+                renderCurrentPortal();
+                return;
+            }
+            selectedStudentId = student.id;
+
+            if (!db.settings.onlineExamAllowed && studentTab === 'exams') {
+                studentTab = 'result';
+            }
+
+            const availableExams = db.onlineExams.filter(ex => ex.className === student.className && ex.active);
+            const resultSummary = calculateStudentResult(student);
+
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div class="flex items-center gap-3.5">
+                            <img src="${student.photo}" class="w-14 h-16 rounded-xl object-cover border border-slate-200 shadow-xs">
+                            <div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[11px] font-extrabold uppercase">Student Portal</span>
+                                    <span class="text-xs font-bold text-indigo-700">${student.regNo}</span>
+                                </div>
+                                <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">${student.name}</h2>
+                                <p class="text-xs text-slate-500">Class: <strong>${student.className}</strong> • Roll No: <strong>${student.rollNo}</strong> • S/o ${student.fatherName}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div class="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                                <button onclick="studentTab='exams'; renderCurrentPortal()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${studentTab === 'exams' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}">
+                                    <i class="fa-solid fa-laptop-code mr-1"></i> Online Exams ${db.settings.onlineExamAllowed ? `(${availableExams.length})` : '(Disabled)'}
+                                </button>
+                                <button onclick="studentTab='result'; renderCurrentPortal()" class="px-3 py-1.5 rounded-lg text-xs font-bold transition ${studentTab === 'result' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'}">
+                                    <i class="fa-solid fa-award mr-1"></i> Result & A4 PDF
+                                </button>
+                            </div>
+                            <button onclick="openIdCardModal('${student.id}')" class="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold">
+                                <i class="fa-solid fa-id-card mr-1"></i> ID Card
+                            </button>
+                            <button onclick="logoutCurrentUser()" class="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold">
+                                <i class="fa-solid fa-right-from-bracket"></i> Logout
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="student-tab-body"></div>
+                </div>
+            `;
+
+            const body = document.getElementById('student-tab-body');
+
+            if (activeExamSession) {
+                renderActiveOnlineExam(body, student);
+            } else if (studentTab === 'exams') {
+                if (!db.settings.onlineExamAllowed) {
+                    body.innerHTML = `
+                        <div class="bg-white rounded-2xl p-8 text-center border border-amber-200 shadow-sm">
+                            <div class="w-14 h-14 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-3">
+                                <i class="fa-solid fa-ban text-xl"></i>
+                            </div>
+                            <h3 class="text-lg font-extrabold text-slate-900">Online Exams Are Not Allowed by School Administration</h3>
+                            <p class="text-xs sm:text-sm text-slate-600 max-w-xl mx-auto mt-1.5 mb-5">
+                                Your evaluation is conducted across <strong>Quarterly, Half-Yearly & Yearly</strong> exams (<strong>10 Marks Viva + 20 Marks Test + 70 Marks Theory = 100 Marks per Subject</strong>).
+                            </p>
+                            <button onclick="studentTab='result'; renderCurrentPortal()" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow">
+                                View Multi-Term 100-Mark Marksheet
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+                body.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        ${availableExams.length === 0 ? `
+                            <div class="col-span-2 bg-white rounded-2xl p-8 text-center border border-slate-200 text-sm text-slate-500">
+                                No active online exams published for <strong>${student.className}</strong> right now.
+                            </div>
+                        ` : availableExams.map(ex => {
+                            const prevScore = student.onlineMarks[ex.subject];
+                            const hasTaken = prevScore !== undefined;
+                            return `
+                                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex items-center justify-between gap-2 mb-2">
+                                            <span class="px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-xs font-bold">${ex.subject}</span>
+                                            <span class="text-xs text-slate-500 font-semibold"><i class="fa-regular fa-clock mr-1"></i>${ex.durationMinutes} Mins • ${ex.totalMarks} Marks</span>
+                                        </div>
+                                        <h3 class="font-bold text-slate-900 text-base">${ex.title}</h3>
+                                        <p class="text-xs text-slate-500 mt-1">${ex.questions.length} Multiple Choice Questions. Marks automatically sync with your A4 Marksheet.</p>
+                                    </div>
+                                    <div class="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                                        ${hasTaken ? `
+                                            <span class="text-xs font-bold text-emerald-700"><i class="fa-solid fa-circle-check mr-1"></i>Score: ${prevScore} / ${ex.totalMarks}</span>
+                                        ` : `<span class="text-xs text-amber-600 font-semibold">Not Attempted Yet</span>`}
+                                        <button onclick="startOnlineExam('${ex.id}')" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs">
+                                            ${hasTaken ? 'Retake Online Exam' : 'Start Online Exam'}
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            } else {
+                const isThreePaperMode = !db.settings.onlineExamAllowed;
+                body.innerHTML = `
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-5 bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div>
+                                <p class="text-xs text-indigo-300 uppercase font-bold tracking-wider">${db.settings.activeExamTerm} ${isThreePaperMode ? '• 100M (10 Viva + 20 Test + 70 Theory)' : ''}</p>
+                                <h3 class="text-xl font-extrabold mt-0.5">Official Statement of Marks</h3>
+                                <p class="text-xs text-slate-300 mt-1">Aggregate: <strong>${resultSummary.grandObtained} / ${resultSummary.grandMax}</strong> (${resultSummary.percentage}%) • Grade: <strong>${resultSummary.grade}</strong></p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="openIdCardModal('${student.id}')" class="px-4 py-3 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-extrabold text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2 transition">
+                                    <i class="fa-solid fa-id-card"></i> Print ID Card
+                                </button>
+                                <button onclick="openMarksheetModal('${student.id}')" class="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2 transition">
+                                    <i class="fa-solid fa-file-pdf"></i> Generate A4 Marksheet & QR Code
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            ${isThreePaperMode ? `
+                                <table class="w-full text-left border-collapse text-xs">
+                                    <thead>
+                                        <tr class="bg-slate-100 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-600">
+                                            <th class="p-3 border-r border-slate-200" rowspan="2">Subject (300)</th>
+                                            <th class="p-2 text-center border-r border-slate-200 bg-sky-50/70" colspan="4">Quarterly (100)</th>
+                                            <th class="p-2 text-center border-r border-slate-200 bg-purple-50/70" colspan="4">Half-Yearly (100)</th>
+                                            <th class="p-2 text-center border-r border-slate-200 bg-emerald-50/70" colspan="4">Yearly (100)</th>
+                                            <th class="p-3 text-center" rowspan="2">Final Total (300)</th>
+                                        </tr>
+                                        <tr class="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 text-center">
+                                            <th class="p-1.5">Viva(10)</th><th class="p-1.5">Test(20)</th><th class="p-1.5">Th(70)</th><th class="p-1.5 border-r border-slate-200 bg-sky-100/50 text-slate-800">Tot</th>
+                                            <th class="p-1.5">Viva(10)</th><th class="p-1.5">Test(20)</th><th class="p-1.5">Th(70)</th><th class="p-1.5 border-r border-slate-200 bg-purple-100/50 text-slate-800">Tot</th>
+                                            <th class="p-1.5">Viva(10)</th><th class="p-1.5">Test(20)</th><th class="p-1.5">Th(70)</th><th class="p-1.5 border-r border-slate-200 bg-emerald-100/50 text-slate-800">Tot</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        ${resultSummary.rows.map(r => {
+                                            const tp = r.termDetails;
+                                            return `
+                                                <tr>
+                                                    <td class="p-3 font-bold text-slate-900 border-r border-slate-200">${r.subject}</td>
+                                                    <td class="p-2 text-center">${tp.quarterly.viva}</td><td class="p-2 text-center">${tp.quarterly.test}</td><td class="p-2 text-center">${tp.quarterly.theory}</td><td class="p-2 text-center font-bold border-r border-slate-200 bg-sky-50/40">${tp.quarterly.sum}</td>
+                                                    <td class="p-2 text-center">${tp.halfYearly.viva}</td><td class="p-2 text-center">${tp.halfYearly.test}</td><td class="p-2 text-center">${tp.halfYearly.theory}</td><td class="p-2 text-center font-bold border-r border-slate-200 bg-purple-50/40">${tp.halfYearly.sum}</td>
+                                                    <td class="p-2 text-center">${tp.yearly.viva}</td><td class="p-2 text-center">${tp.yearly.test}</td><td class="p-2 text-center">${tp.yearly.theory}</td><td class="p-2 text-center font-bold border-r border-slate-200 bg-emerald-50/40">${tp.yearly.sum}</td>
+                                                    <td class="p-3 text-center font-extrabold text-indigo-900">${r.total}</td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            ` : `
+                                <table class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500">
+                                            <th class="p-3.5">Subject</th>
+                                            <th class="p-3.5 text-center">Offline Theory (80)</th>
+                                            <th class="p-3.5 text-center">Online Exam (20)</th>
+                                            <th class="p-3.5 text-center">Total Obtained (100)</th>
+                                            <th class="p-3.5 text-center">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100 text-sm">
+                                        ${resultSummary.rows.map(r => `
+                                            <tr>
+                                                <td class="p-3.5 font-bold text-slate-800">${r.subject}</td>
+                                                <td class="p-3.5 text-center text-slate-700">${r.offline}</td>
+                                                <td class="p-3.5 text-center text-indigo-700 font-semibold">${r.online}</td>
+                                                <td class="p-3.5 text-center font-extrabold text-slate-900">${r.total}</td>
+                                                <td class="p-3.5 text-center">
+                                                    <span class="px-2 py-0.5 rounded text-[11px] font-bold ${r.total >= 33 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                                                        ${r.total >= 33 ? 'PASS' : 'FAIL'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function startOnlineExam(examId) {
+            if (!db.settings.onlineExamAllowed) {
+                showToast('Online Exams are currently disabled by Admin.', 'error');
+                return;
+            }
+            const exam = db.onlineExams.find(e => e.id === examId);
+            if (!exam) return;
+
+            activeExamSession = {
+                examId: exam.id,
+                answers: {},
+                timeLeftSeconds: exam.durationMinutes * 60,
+                timerInterval: setInterval(() => {
+                    if (!activeExamSession) return;
+                    activeExamSession.timeLeftSeconds--;
+                    const timerEl = document.getElementById('exam-timer-display');
+                    if (timerEl) {
+                        const m = String(Math.floor(activeExamSession.timeLeftSeconds / 60)).padStart(2, '0');
+                        const s = String(activeExamSession.timeLeftSeconds % 60).padStart(2, '0');
+                        timerEl.textContent = `${m}:${s}`;
+                    }
+                    if (activeExamSession.timeLeftSeconds <= 0) {
+                        submitOnlineExam();
+                    }
+                }, 1000)
+            };
+            renderCurrentPortal();
+        }
+
+        function renderActiveOnlineExam(container, student) {
+            const exam = db.onlineExams.find(e => e.id === activeExamSession.examId);
+            const m = String(Math.floor(activeExamSession.timeLeftSeconds / 60)).padStart(2, '0');
+            const s = String(activeExamSession.timeLeftSeconds % 60).padStart(2, '0');
+
+            container.innerHTML = `
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                        <div>
+                            <h3 class="font-bold text-base sm:text-lg">${exam.title}</h3>
+                            <p class="text-xs text-slate-400">Candidate: ${student.name} (${student.regNo})</p>
+                        </div>
+                        <div class="bg-rose-600 px-3.5 py-1.5 rounded-xl font-mono font-bold text-sm flex items-center gap-2">
+                            <i class="fa-regular fa-clock"></i> <span id="exam-timer-display">${m}:${s}</span>
+                        </div>
+                    </div>
+
+                    <div class="p-6 space-y-6">
+                        ${exam.questions.map((item, qIdx) => `
+                            <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                                <p class="font-bold text-sm text-slate-900 mb-3">Q${qIdx + 1}. ${item.q}</p>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                    ${item.options.map((opt, optIdx) => `
+                                        <label class="flex items-center gap-2.5 p-3 rounded-xl border border-slate-300 bg-white hover:bg-indigo-50 cursor-pointer text-xs sm:text-sm font-medium">
+                                            <input type="radio" name="q_${qIdx}" value="${optIdx}" onchange="activeExamSession.answers[${qIdx}]=${optIdx}" class="text-indigo-600 focus:ring-indigo-500">
+                                            <span>${opt}</span>
+                                        </label>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+
+                        <div class="flex justify-end gap-3 pt-2">
+                            <button onclick="cancelOnlineExam()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">Cancel</button>
+                            <button onclick="submitOnlineExam()" class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow">
+                                Submit & Auto-Grade Exam
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function cancelOnlineExam() {
+            if (activeExamSession?.timerInterval) clearInterval(activeExamSession.timerInterval);
+            activeExamSession = null;
+            renderCurrentPortal();
+        }
+
+        function submitOnlineExam() {
+            if (!activeExamSession) return;
+            const exam = db.onlineExams.find(e => e.id === activeExamSession.examId);
+            const student = db.students.find(s => s.id === selectedStudentId);
+            let correctCount = 0;
+            exam.questions.forEach((q, idx) => {
+                if (activeExamSession.answers[idx] === q.answer) correctCount++;
+            });
+
+            const marksPerQ = exam.totalMarks / exam.questions.length;
+            const obtained = Math.round(correctCount * marksPerQ);
+
+            if (student && exam) {
+                student.onlineMarks[exam.subject] = obtained;
+                saveState();
+            }
+
+            if (activeExamSession.timerInterval) clearInterval(activeExamSession.timerInterval);
+            activeExamSession = null;
+            studentTab = 'result';
+            renderCurrentPortal();
+            showToast(`Exam Submitted! You scored ${obtained} / ${exam.totalMarks} in ${exam.subject}.`, 'success');
+        }
+
+        // =========================================================================
+        // 10. RESULT CALCULATION, A4 MARKSHEET GENERATOR & QR VERIFICATION
+        // =========================================================================
+        function calculateStudentResult(student) {
+            const activeSubs = db.subjects && db.subjects.length > 0 ? db.subjects : DEFAULT_SUBJECTS;
+            const useThreePaperMode = !db.settings.onlineExamAllowed;
+            const maxPerSubject = useThreePaperMode ? 300 : 100;
+            const passPerSubject = useThreePaperMode ? 99 : 33;
+            let grandObtained = 0;
+            const grandMax = activeSubs.length * maxPerSubject;
+            let allPassed = true;
+
+            const rows = activeSubs.map(sub => {
+                const subTerms = (student.termPapers && student.termPapers[sub]) || {};
+                const getTermObj = (k) => {
+                    const t = subTerms[k] || { viva: 0, test: 0, theory: 0 };
+                    const viva = Number(t.viva) || 0;
+                    const test = Number(t.test) || 0;
+                    const theory = Number(t.theory) || 0;
+                    return { viva, test, theory, sum: viva + test + theory };
+                };
+
+                const termDetails = {
+                    quarterly: getTermObj('quarterly'),
+                    halfYearly: getTermObj('halfYearly'),
+                    yearly: getTermObj('yearly')
+                };
+
+                let offline = 0;
+                let online = 0;
+                let total = 0;
+
+                if (useThreePaperMode) {
+                    offline = termDetails.yearly.sum || Number(student.offlineMarks[sub] || 0);
+                    total = Math.min(300, termDetails.quarterly.sum + termDetails.halfYearly.sum + termDetails.yearly.sum);
+                } else {
+                    offline = termDetails.yearly.sum || Number(student.offlineMarks[sub] || 0);
+                    online = Number(student.onlineMarks[sub] || 0);
+                    total = Math.min(100, Math.round((offline * 0.8) + online));
+                }
+
+                grandObtained += total;
+                if (total < passPerSubject) allPassed = false;
+                return { subject: sub, offline, online, total, maxMarks: maxPerSubject, termDetails };
+            });
+
+            const percentage = grandMax > 0 ? ((grandObtained / grandMax) * 100).toFixed(2) : '0.00';
+            let grade = 'D';
+            if (percentage >= 90) grade = 'A1';
+            else if (percentage >= 80) grade = 'A2';
+            else if (percentage >= 70) grade = 'B1';
+            else if (percentage >= 60) grade = 'B2';
+            else if (percentage >= 50) grade = 'C1';
+            else if (percentage >= 33) grade = 'C2';
+            else grade = 'E (Needs Improvement)';
+
+            return { rows, grandObtained, grandMax, percentage, grade, passed: allPassed, useThreePaperMode };
+        }
+
+        function openMarksheetModal(studentId) {
+            const student = db.students.find(s => s.id === studentId);
+            if (!student) return;
+
+            const res = calculateStudentResult(student);
+            const verifyUrl = `${window.location.origin}${window.location.pathname}?verify=${encodeURIComponent(student.regNo)}`;
+            const verificationHash = btoa(`${student.regNo}|${res.grandObtained}|${res.percentage}`).slice(0, 14).toUpperCase();
+
+            document.getElementById('btn-simulate-qr').onclick = () => openVerifyModal(student.id);
+
+            const marksTableHtml = res.useThreePaperMode ? `
+                <table class="w-full border-collapse border border-slate-800 text-[10px] mb-5">
+                    <thead>
+                        <tr class="bg-slate-200 text-slate-900 font-bold uppercase">
+                            <th class="border border-slate-800 p-1.5 text-left" rowspan="2">Subject (300)</th>
+                            <th class="border border-slate-800 p-1 text-center" colspan="4">Quarterly (100)</th>
+                            <th class="border border-slate-800 p-1 text-center" colspan="4">Half-Yearly (100)</th>
+                            <th class="border border-slate-800 p-1 text-center" colspan="4">Yearly (100)</th>
+                            <th class="border border-slate-800 p-1.5 text-center" rowspan="2">Final Total (300)</th>
+                            <th class="border border-slate-800 p-1.5 text-center" rowspan="2">Grade</th>
+                        </tr>
+                        <tr class="bg-slate-100 text-slate-800 font-bold text-center">
+                            <th class="border border-slate-800 p-1">V(10)</th><th class="border border-slate-800 p-1">T(20)</th><th class="border border-slate-800 p-1">Th(70)</th><th class="border border-slate-800 p-1 bg-slate-200">Tot</th>
+                            <th class="border border-slate-800 p-1">V(10)</th><th class="border border-slate-800 p-1">T(20)</th><th class="border border-slate-800 p-1">Th(70)</th><th class="border border-slate-800 p-1 bg-slate-200">Tot</th>
+                            <th class="border border-slate-800 p-1">V(10)</th><th class="border border-slate-800 p-1">T(20)</th><th class="border border-slate-800 p-1">Th(70)</th><th class="border border-slate-800 p-1 bg-slate-200">Tot</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${res.rows.map(r => {
+                            const tp = r.termDetails;
+                            const pctSub = (r.total / 300) * 100;
+                            const subGrade = pctSub >= 91 ? 'A1' : pctSub >= 81 ? 'A2' : pctSub >= 71 ? 'B1' : pctSub >= 61 ? 'B2' : pctSub >= 51 ? 'C1' : pctSub >= 33 ? 'C2' : 'E';
+                            return `
+                                <tr>
+                                    <td class="border border-slate-800 p-1.5 font-bold">${r.subject}</td>
+                                    <td class="border border-slate-800 p-1 text-center">${tp.quarterly.viva}</td><td class="border border-slate-800 p-1 text-center">${tp.quarterly.test}</td><td class="border border-slate-800 p-1 text-center">${tp.quarterly.theory}</td><td class="border border-slate-800 p-1 text-center font-bold bg-slate-50">${tp.quarterly.sum}</td>
+                                    <td class="border border-slate-800 p-1 text-center">${tp.halfYearly.viva}</td><td class="border border-slate-800 p-1 text-center">${tp.halfYearly.test}</td><td class="border border-slate-800 p-1 text-center">${tp.halfYearly.theory}</td><td class="border border-slate-800 p-1 text-center font-bold bg-slate-50">${tp.halfYearly.sum}</td>
+                                    <td class="border border-slate-800 p-1 text-center">${tp.yearly.viva}</td><td class="border border-slate-800 p-1 text-center">${tp.yearly.test}</td><td class="border border-slate-800 p-1 text-center">${tp.yearly.theory}</td><td class="border border-slate-800 p-1 text-center font-bold bg-slate-50">${tp.yearly.sum}</td>
+                                    <td class="border border-slate-800 p-1.5 text-center font-extrabold">${r.total} / 300</td>
+                                    <td class="border border-slate-800 p-1.5 text-center font-bold">${subGrade}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                        <tr class="bg-slate-100 font-extrabold text-xs">
+                            <td colspan="13" class="border border-slate-800 p-2 text-right uppercase">Grand Total (${res.grandMax}) • Aggregate: ${res.percentage}%</td>
+                            <td class="border border-slate-800 p-2 text-center text-indigo-950">${res.grandObtained}</td>
+                            <td class="border border-slate-800 p-2 text-center">${res.grade}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            ` : `
+                <table class="w-full border-collapse border border-slate-800 text-xs mb-5">
+                    <thead>
+                        <tr class="bg-slate-200 text-slate-900 font-bold uppercase">
+                            <th class="border border-slate-800 p-2 text-left">Sub Code</th>
+                            <th class="border border-slate-800 p-2 text-left">Subject Name</th>
+                            <th class="border border-slate-800 p-2 text-center">Max Marks</th>
+                            <th class="border border-slate-800 p-2 text-center">Offline Theory (80)</th>
+                            <th class="border border-slate-800 p-2 text-center">Online Exam (20)</th>
+                            <th class="border border-slate-800 p-2 text-center">Total Obtained</th>
+                            <th class="border border-slate-800 p-2 text-center">Grade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${res.rows.map((r, i) => {
+                            const subGrade = r.total >= 91 ? 'A1' : r.total >= 81 ? 'A2' : r.total >= 71 ? 'B1' : r.total >= 61 ? 'B2' : r.total >= 51 ? 'C1' : r.total >= 33 ? 'C2' : 'E';
+                            return `
+                                <tr>
+                                    <td class="border border-slate-800 p-2 font-mono">0${i + 1}</td>
+                                    <td class="border border-slate-800 p-2 font-bold">${r.subject}</td>
+                                    <td class="border border-slate-800 p-2 text-center">100</td>
+                                    <td class="border border-slate-800 p-2 text-center">${r.offline}</td>
+                                    <td class="border border-slate-800 p-2 text-center">${r.online}</td>
+                                    <td class="border border-slate-800 p-2 text-center font-extrabold">${r.total}</td>
+                                    <td class="border border-slate-800 p-2 text-center font-bold">${subGrade}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                        <tr class="bg-slate-100 font-extrabold text-sm">
+                            <td colspan="2" class="border border-slate-800 p-2.5 text-right uppercase">Grand Total</td>
+                            <td class="border border-slate-800 p-2.5 text-center">${res.grandMax}</td>
+                            <td colspan="2" class="border border-slate-800 p-2.5 text-center text-xs font-semibold">Aggregate Percentage: ${res.percentage}%</td>
+                            <td class="border border-slate-800 p-2.5 text-center text-indigo-950">${res.grandObtained}</td>
+                            <td class="border border-slate-800 p-2.5 text-center">${res.grade}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+
+            const printArea = document.getElementById('print-area');
+            printArea.innerHTML = `
+                <div class="border border-slate-400 h-full p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="text-center border-b-2 border-slate-800 pb-3 mb-4">
+                            <p class="text-[10px] font-bold tracking-widest uppercase text-slate-600">Affiliated to Central Board of Secondary Education • Affiliation No. 2130984</p>
+                            <h1 class="font-serif-official text-2xl font-black text-indigo-950 tracking-wide mt-1">VIDYA BHARATI PUBLIC SCHOOL</h1>
+                            <p class="text-xs text-slate-700 font-medium">Shastri Nagar, Lucknow, Uttar Pradesh - 226001 • Email: info@vbps-demo.edu.in</p>
+                            <div class="inline-block mt-2 px-4 py-1 bg-slate-900 text-white text-xs font-bold uppercase tracking-wider rounded">
+                                STATEMENT OF MARKS — ${db.settings.activeExamTerm}
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-start gap-4 mb-5 bg-slate-50 p-3.5 rounded-lg border border-slate-300">
+                            <div class="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs flex-1">
+                                <div><span class="text-slate-500 font-semibold">Student Name:</span> <strong class="text-slate-900 uppercase">${student.name}</strong></div>
+                                <div><span class="text-slate-500 font-semibold">Registration No:</span> <strong class="text-indigo-900">${student.regNo}</strong></div>
+                                <div><span class="text-slate-500 font-semibold">Father's Name:</span> <strong class="text-slate-900">${student.fatherName}</strong></div>
+                                <div><span class="text-slate-500 font-semibold">Roll Number:</span> <strong class="text-slate-900">${student.rollNo}</strong></div>
+                                <div><span class="text-slate-500 font-semibold">Mother's Name:</span> <strong class="text-slate-900">${student.motherName}</strong></div>
+                                <div><span class="text-slate-500 font-semibold">Class & Section:</span> <strong class="text-slate-900">${student.className} (Sec-A)</strong></div>
+                                <div><span class="text-slate-500 font-semibold">Date of Birth:</span> <strong class="text-slate-900">${student.dob}</strong></div>
+                                <div><span class="text-slate-500 font-semibold">Mobile No:</span> <strong class="text-slate-900">${student.mobile}</strong></div>
+                            </div>
+                            <div class="shrink-0 text-center">
+                                <img src="${student.photo}" class="w-20 h-24 object-cover border-2 border-slate-700 rounded bg-white">
+                            </div>
+                        </div>
+
+                        ${marksTableHtml}
+
+                        <div class="flex items-center justify-between p-3 rounded border border-slate-800 bg-slate-50 text-xs mb-6">
+                            <div>
+                                <span class="font-bold uppercase text-slate-600">Final Result Status: </span>
+                                <span class="font-black text-sm ${res.passed ? 'text-emerald-800' : 'text-rose-800'}">
+                                    ${res.passed ? 'PASSED & PROMOTED TO NEXT CLASS' : 'COMPARTMENT / NEEDS IMPROVEMENT'}
+                                </span>
+                            </div>
+                            <div class="text-right font-mono text-[11px] text-slate-600">
+                                Digital Cert ID: <strong>${verificationHash}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-300 flex items-end justify-between gap-4">
+                        <div class="flex items-center gap-3 cursor-pointer" onclick="openVerifyModal('${student.id}')" title="Click to simulate scanning this QR Code">
+                            <div id="marksheet-qr-box" class="p-1.5 bg-white border border-slate-400 rounded"></div>
+                            <div class="text-[10px] text-slate-600 max-w-[200px]">
+                                <p class="font-extrabold text-slate-900 uppercase">Scan QR to Verify Result</p>
+                                <p class="mt-0.5">Scan with any mobile camera to verify authenticity on the official school portal.</p>
+                                <p class="font-mono text-[9px] text-indigo-800 mt-1">Ref: ${student.regNo}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-10 text-center text-xs">
+                            <div>
+                                <div class="h-10"></div>
+                                <div class="border-t border-slate-700 pt-1 px-3 font-bold">Class Teacher</div>
+                            </div>
+                            <div>
+                                <div class="h-10 flex items-center justify-center text-indigo-900 font-serif-official italic text-sm">R. K. Tiwari</div>
+                                <div class="border-t border-slate-700 pt-1 px-3 font-bold">Principal / Controller</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const qrContainer = document.getElementById('marksheet-qr-box');
+            qrContainer.innerHTML = '';
+            new QRCode(qrContainer, {
+                text: verifyUrl,
+                width: 82,
+                height: 82,
+                colorDark: '#0f172a',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+
+            const modal = document.getElementById('marksheet-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeMarksheetModal() {
+            const modal = document.getElementById('marksheet-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function openVerifyModal(studentId) {
+            const student = db.students.find(s => s.id === studentId);
+            if (!student) return;
+            const res = calculateStudentResult(student);
+
+            const body = document.getElementById('verify-modal-body');
+            body.innerHTML = `
+                <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 mb-4 flex items-center gap-3">
+                    <i class="fa-solid fa-shield-check text-2xl text-emerald-600"></i>
+                    <div class="text-xs text-emerald-900">
+                        <p class="font-extrabold uppercase">Authentic Marksheet Verified</p>
+                        <p>This record matches the official Vidya Bharati Public School database.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3.5 mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                    <img src="${student.photo}" class="w-14 h-16 rounded-lg object-cover border border-slate-300">
+                    <div class="text-xs space-y-0.5">
+                        <p class="font-extrabold text-base text-slate-900">${student.name}</p>
+                        <p class="text-slate-600">Reg No: <strong class="text-indigo-700">${student.regNo}</strong> • Roll: <strong>${student.rollNo}</strong></p>
+                        <p class="text-slate-600">Father: <strong>${student.fatherName}</strong></p>
+                        <p class="text-slate-600">Class: <strong>${student.className}</strong> • DOB: <strong>${student.dob}</strong></p>
+                    </div>
+                </div>
+
+                <div class="border border-slate-200 rounded-xl overflow-hidden mb-4">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 border-b border-slate-200 font-bold text-slate-700">
+                                <th class="p-2.5">Subject</th>
+                                <th class="p-2.5 text-center">${res.useThreePaperMode ? 'Q + HY + Y' : 'Offline'}</th>
+                                <th class="p-2.5 text-center">${res.useThreePaperMode ? 'Scheme' : 'Online'}</th>
+                                <th class="p-2.5 text-center">Total (${res.useThreePaperMode ? '300' : '100'})</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            ${res.rows.map(r => `
+                                <tr>
+                                    <td class="p-2 font-semibold">${r.subject}</td>
+                                    <td class="p-2 text-center">${res.useThreePaperMode ? `${r.termDetails.quarterly.sum}+${r.termDetails.halfYearly.sum}+${r.termDetails.yearly.sum}` : r.offline}</td>
+                                    <td class="p-2 text-center text-indigo-700">${res.useThreePaperMode ? '10V+20T+70Th' : r.online}</td>
+                                    <td class="p-2 text-center font-bold">${r.total} / ${r.maxMarks}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex items-center justify-between bg-slate-900 text-white px-4 py-3 rounded-xl text-xs">
+                    <span>Total: <strong>${res.grandObtained} / ${res.grandMax}</strong> (${res.percentage}%)</span>
+                    <span class="px-2.5 py-0.5 rounded font-extrabold ${res.passed ? 'bg-emerald-500 text-slate-950' : 'bg-rose-500 text-white'}">
+                        ${res.passed ? 'VERIFIED PASS' : 'NEEDS IMPROVEMENT'}
+                    </span>
+                </div>
+            `;
+
+            const modal = document.getElementById('verify-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeVerifyModal() {
+            const modal = document.getElementById('verify-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // =========================================================================
+        // 11. STUDENT IDENTITY CARD PORTAL & QR IDENTITY VERIFICATION
+        // =========================================================================
+        let idCardSearchQuery = '';
+
+        function renderIdCardPortal(container) {
+            const q = idCardSearchQuery.toLowerCase();
+            const matchedStudents = db.students.filter(s =>
+                !q || s.name.toLowerCase().includes(q) || s.regNo.toLowerCase().includes(q) || s.mobile.includes(q)
+            );
+
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-800 text-xs font-extrabold uppercase">ID Card Desk</span>
+                                <h2 class="text-xl font-extrabold text-slate-900">Student Identity Card & QR Verification Portal</h2>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-0.5">Generate & print official Student Identity Cards embedded with a scannable QR verification code.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="text" value="${idCardSearchQuery}" oninput="idCardSearchQuery=this.value; renderCurrentPortal()" placeholder="Search Name, Reg No, Mobile..." class="px-3.5 py-2 rounded-xl border border-slate-300 text-xs w-60">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                        ${matchedStudents.map(stu => `
+                            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col justify-between">
+                                <div class="flex items-center gap-3.5">
+                                    <img src="${stu.photo}" class="w-16 h-20 rounded-xl object-cover border border-slate-300 shrink-0">
+                                    <div class="text-xs space-y-1">
+                                        <span class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-bold text-[10px]">${stu.regNo}</span>
+                                        <h3 class="font-extrabold text-base text-slate-900 leading-tight">${stu.name}</h3>
+                                        <p class="text-slate-600">Class: <strong>${stu.className}</strong> • Roll: <strong>${stu.rollNo}</strong></p>
+                                        <p class="text-slate-500">S/o ${stu.fatherName}</p>
+                                    </div>
+                                </div>
+                                <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                                    <button onclick="openVerifyIdModal('${stu.id}')" class="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold">
+                                        <i class="fa-solid fa-qrcode mr-1"></i> Verify ID
+                                    </button>
+                                    <button onclick="openIdCardModal('${stu.id}')" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs">
+                                        <i class="fa-solid fa-id-card mr-1"></i> View & Print ID Card
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function openIdCardModal(studentId) {
+            const student = db.students.find(s => s.id === studentId);
+            if (!student) return;
+
+            const verifyIdUrl = `${window.location.origin}${window.location.pathname}?verifyid=${encodeURIComponent(student.regNo)}`;
+            document.getElementById('btn-simulate-id-qr').onclick = () => openVerifyIdModal(student.id);
+
+            const area = document.getElementById('idcard-print-area');
+            area.innerHTML = `
+                <div class="bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white p-4 text-center border-b-4 border-amber-400">
+                    <p class="text-[9px] uppercase tracking-widest text-indigo-200 font-bold">CBSE Affiliated • Aff. No. 2130984</p>
+                    <h2 class="font-serif-official text-base font-black tracking-wide mt-0.5">VIDYA BHARATI PUBLIC SCHOOL</h2>
+                    <p class="text-[10px] text-indigo-200">Shastri Nagar, Lucknow • Ph: 0522-2458910</p>
+                    <span class="inline-block mt-1.5 px-3 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-extrabold uppercase tracking-wider">
+                        STUDENT IDENTITY CARD (2025-26)
+                    </span>
+                </div>
+
+                <div class="p-4 bg-white">
+                    <div class="flex flex-col items-center text-center mb-3">
+                        <img src="${student.photo}" class="w-24 h-28 object-cover rounded-xl border-2 border-indigo-900 shadow-md bg-slate-100">
+                        <h3 class="text-lg font-extrabold text-slate-900 uppercase mt-2 leading-tight">${student.name}</h3>
+                        <p class="text-xs font-bold text-indigo-700">${student.className} • Roll No: ${student.rollNo}</p>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 text-[11px] space-y-1.5">
+                        <div class="flex justify-between"><span class="text-slate-500 font-semibold">Reg. No:</span><strong class="text-slate-900 font-mono">${student.regNo}</strong></div>
+                        <div class="flex justify-between"><span class="text-slate-500 font-semibold">Father's Name:</span><strong class="text-slate-900">${student.fatherName}</strong></div>
+                        <div class="flex justify-between"><span class="text-slate-500 font-semibold">Date of Birth:</span><strong class="text-slate-900">${student.dob}</strong></div>
+                        <div class="flex justify-between"><span class="text-slate-500 font-semibold">Emergency Mob:</span><strong class="text-slate-900">${student.mobile}</strong></div>
+                        <div class="pt-1 border-t border-slate-200 text-[10px] text-slate-600">
+                            <span class="font-semibold text-slate-500">Address:</span> ${student.address}
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2.5 cursor-pointer" onclick="openVerifyIdModal('${student.id}')" title="Click to simulate scanning ID QR Code">
+                            <div id="idcard-qr-box" class="p-1 bg-white border border-slate-300 rounded"></div>
+                            <div class="text-[9px] text-slate-600 leading-tight max-w-[115px]">
+                                <p class="font-extrabold text-slate-900 uppercase">Scan to Verify ID</p>
+                                <p class="mt-0.5">Official Digital Student Identity</p>
+                            </div>
+                        </div>
+                        <div class="text-center text-[10px]">
+                            <div class="font-serif-official italic text-indigo-900 text-xs mb-0.5">R. K. Tiwari</div>
+                            <div class="border-t border-slate-700 pt-0.5 px-2 font-bold text-slate-800">Principal</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const qrBox = document.getElementById('idcard-qr-box');
+            qrBox.innerHTML = '';
+            new QRCode(qrBox, {
+                text: verifyIdUrl,
+                width: 64,
+                height: 64,
+                colorDark: '#0f172a',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.M
+            });
+
+            const modal = document.getElementById('idcard-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeIdCardModal() {
+            const modal = document.getElementById('idcard-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function openVerifyIdModal(studentId) {
+            const student = db.students.find(s => s.id === studentId);
+            if (!student) return;
+
+            const body = document.getElementById('verify-modal-body');
+            body.innerHTML = `
+                <div class="bg-purple-50 border border-purple-200 rounded-xl p-3.5 mb-4 flex items-center gap-3">
+                    <i class="fa-solid fa-id-card-clip text-2xl text-purple-700"></i>
+                    <div class="text-xs text-purple-950">
+                        <p class="font-extrabold uppercase">Active Student Identity Verified</p>
+                        <p>This Student ID Card is officially issued by Vidya Bharati Public School.</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 mb-4">
+                    <img src="${student.photo}" class="w-20 h-24 rounded-xl object-cover border-2 border-purple-700">
+                    <div class="text-xs space-y-1">
+                        <p class="font-extrabold text-lg text-slate-900">${student.name}</p>
+                        <p class="text-slate-700">Reg No: <strong class="text-indigo-700">${student.regNo}</strong></p>
+                        <p class="text-slate-700">Class: <strong>${student.className}</strong> • Roll No: <strong>${student.rollNo}</strong></p>
+                        <p class="text-slate-700">Father: <strong>${student.fatherName}</strong></p>
+                        <p class="text-slate-700">Mother: <strong>${student.motherName}</strong></p>
+                        <p class="text-slate-700">DOB: <strong>${student.dob}</strong> • Mobile: <strong>${student.mobile}</strong></p>
+                    </div>
+                </div>
+
+                <div class="bg-emerald-600 text-white px-4 py-3 rounded-xl text-xs flex items-center justify-between font-bold">
+                    <span><i class="fa-solid fa-circle-check mr-1.5"></i>ENROLLMENT STATUS: ACTIVE</span>
+                    <span>SESSION 2025-26</span>
+                </div>
+            `;
+
+            const modal = document.getElementById('verify-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        // =========================================================================
+        // 12. INITIALIZATION & URL QUERY CHECK (?verify=REG_NO & ?verifyid=REG_NO)
+        // =========================================================================
+        window.onload = function() {
+            initCloudDatabase();
+            switchPortal('admission');
+
+            const params = new URLSearchParams(window.location.search);
+            const verifyReg = params.get('verify');
+            const verifyIdReg = params.get('verifyid');
+            if (verifyReg) {
+                const matchedStudent = db.students.find(s => s.regNo === verifyReg);
+                if (matchedStudent) {
+                    openVerifyModal(matchedStudent.id);
+                }
+            } else if (verifyIdReg) {
+                const matchedStudent = db.students.find(s => s.regNo === verifyIdReg);
+                if (matchedStudent) {
+                    openVerifyIdModal(matchedStudent.id);
+                }
+            }
+        };
+    </script>
+</body>
+</html>
