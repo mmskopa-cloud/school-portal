@@ -196,22 +196,15 @@
     </div>
 
     <script>
-        // =========================================================================
-        // 1. CLOUD DATABASE CONFIGURATION (PASTE YOUR FIREBASE API KEY HERE)
-        // =========================================================================
         const FIREBASE_CONFIG = {
-          apiKey: "AIzaSyCm-vfaSlLOdMN3-RAlY51NVMNsxpJ3YRk",
-          authDomain: "school-cloud-portal.firebaseapp.com",
-          projectId: "school-cloud-portal",
-          storageBucket: "school-cloud-portal.firebasestorage.app",
-          messagingSenderId: "784294397359",
-          appId: "1:784294397359:web:8f83e15f55022dc8e35b5a"
-};
+            apiKey: "AIzaSyCm-vfaSlLOdMN3-RAlY51NVMNsxpJ3YRk",
+            authDomain: "school-cloud-portal.firebaseapp.com",
+            projectId: "school-cloud-portal",
+            storageBucket: "school-cloud-portal.firebasestorage.app",
+            messagingSenderId: "784294397359",
+            appId: "1:784294397359:web:8f53a151c55c22dc8e36b5"
         };
 
-        // =========================================================================
-        // 2. GLOBAL CONSTANTS, SESSION STATE & HELPERS
-        // =========================================================================
         const STORAGE_KEY = "vbps_cloud_portal_state_v1";
         const DEFAULT_SUBJECTS = ["English", "Hindi", "Mathematics", "Science", "Social Studies", "Computer Science"];
         const TERMS = [
@@ -396,9 +389,6 @@
             }
         }
 
-        // =========================================================================
-        // 3. UI HELPERS, TOASTS, IMAGE COMPRESSION & GRADE CALCULATION
-        // =========================================================================
         function showToast(msg, type = 'info') {
             const container = document.getElementById('toast-container');
             if (!container) return;
@@ -509,9 +499,6 @@
             };
         }
 
-        // =========================================================================
-        // 4. NAVIGATION, AUTHENTICATION & HEADER STATUS
-        // =========================================================================
         function updateHeaderBadges() {
             const container = document.getElementById('header-status-badges');
             if (!container) return;
@@ -647,9 +634,6 @@
             }
         }
 
-        // =========================================================================
-        // 5. PUBLIC STUDENT ADMISSION PORTAL
-        // =========================================================================
         function renderAdmissionPortal(container) {
             if (!appState.settings.admissionOpen) {
                 container.innerHTML = `
@@ -970,9 +954,6 @@
             openVerifyModal(found ? found.id : code, 'idcard');
         }
 
-        // =========================================================================
-        // 6. A4 MARKSHEET & QR VERIFICATION MODALS
-        // =========================================================================
         function openMarksheetModal(studentId) {
             const student = appState.students.find(s => s.id === studentId);
             if (!student) { showToast("Student record not found.", "error"); return; }
@@ -1152,9 +1133,6 @@
             modal.classList.remove('flex');
         }
 
-        // =========================================================================
-        // 7. ADMIN DASHBOARD
-        // =========================================================================
         function renderAdminPortal(container) {
             const s = appState.settings;
             const pendingCount = appState.admissions.filter(a => a.status === 'pending').length;
@@ -1736,7 +1714,7 @@
                                         const q = getTermEntry(stu, sub, 'quarterly');
                                         const hy = getTermEntry(stu, sub, 'halfyearly');
                                         const y = getTermEntry(stu, sub, 'yearly');
-                                        const cell = (sk, obj, max) => `
+                                        const cell = (sk, obj) => `
                                             <div class="inline-flex gap-1">
                                                 <input type="number" min="0" max="10" id="adm-m-${sIdx}-${sk}-v" value="${obj.viva}" class="w-10 text-center py-1 border border-slate-300 rounded font-bold">
                                                 <input type="number" min="0" max="20" id="adm-m-${sIdx}-${sk}-t" value="${obj.test}" class="w-10 text-center py-1 border border-slate-300 rounded font-bold">
@@ -1812,9 +1790,6 @@
             modal.classList.remove('flex');
         }
 
-        // =========================================================================
-        // 8. OPERATOR PORTAL
-        // =========================================================================
         function renderOperatorPortal(container) {
             const s = appState.settings;
             const pendingCount = appState.admissions.filter(a => a.status === 'pending').length;
@@ -1914,9 +1889,6 @@
             showToast(`Saved ${subject} (${term}) marks for ${count} student(s).`, "success");
         }
 
-        // =========================================================================
-        // 9. TEACHER PORTAL
-        // =========================================================================
         function renderTeacherPortal(container) {
             const teacher = appState.teachers.find(t => t.id === authSession.teacherId);
             if (!teacher) { container.innerHTML = `<p class="text-xs text-slate-500">Teacher record not found.</p>`; return; }
@@ -2009,9 +1981,6 @@
             showToast(`Saved ${subject} (${term}) marks for ${count} student(s).`, "success");
         }
 
-        // =========================================================================
-        // 10. STUDENT PORTAL
-        // =========================================================================
         function renderStudentPortal(container) {
             const student = appState.students.find(s => s.id === authSession.studentId);
             if (!student) { container.innerHTML = `<p class="text-xs text-slate-500">Student record not found.</p>`; return; }
@@ -2193,9 +2162,6 @@
             showToast(`${auto ? 'Time up! ' : ''}Exam submitted. Your score: ${score}/${exam.maxMarks}`, "success");
         }
 
-        // =========================================================================
-        // 11. BOOT
-        // =========================================================================
         document.addEventListener('DOMContentLoaded', () => {
             initCloudSync();
             switchPortal('admission');
